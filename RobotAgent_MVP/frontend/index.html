@@ -272,6 +272,23 @@
             <!-- 主要功能区域 -->
             <div class="row">
                 <div class="col-lg-6">
+                    <!-- 对话区域 -->
+                    <div class="command-input">
+                        <h5><i class="fas fa-comments"></i> 智能对话</h5>
+                        <div id="chatMessages" class="log-container mb-3" style="height: 250px;">
+                            <div class="log-entry">
+                                <span class="log-timestamp">[系统]</span>
+                                <span class="log-level-info">开始与机器人对话...</span>
+                            </div>
+                        </div>
+                        <div class="d-flex gap-2">
+                            <input type="text" id="chatInput" class="form-control" placeholder="输入消息..." onkeypress="handleChatKeyPress(event)">
+                            <button id="sendChat" class="btn btn-primary">
+                                <i class="fas fa-paper-plane"></i> 发送
+                            </button>
+                        </div>
+                    </div>
+
                     <!-- 命令输入 -->
                     <div class="command-input">
                         <h5><i class="fas fa-microphone"></i> 自然语言命令输入</h5>
@@ -279,7 +296,7 @@
                             <textarea 
                                 id="commandInput" 
                                 class="form-control" 
-                                rows="4" 
+                                rows="3" 
                                 placeholder="请输入自然语言指令，例如：&#10;- 移动机械臂到位置 (0.5, 0.3, 0.2)&#10;- 抓取桌上的红色方块&#10;- 将夹爪打开&#10;- 回到初始位置"
                             ></textarea>
                         </div>
@@ -291,14 +308,6 @@
                             <button id="sendCommand" class="btn btn-primary">
                                 <i class="fas fa-paper-plane"></i> 发送命令
                             </button>
-                        </div>
-                    </div>
-
-                    <!-- 命令历史 -->
-                    <div class="status-card">
-                        <h5><i class="fas fa-history"></i> 命令历史</h5>
-                        <div id="commandHistory" style="max-height: 300px; overflow-y: auto;">
-                            <p class="text-muted">暂无命令历史</p>
                         </div>
                     </div>
                 </div>
@@ -418,10 +427,22 @@
                     this.sendCommand();
                 });
 
+                // 发送对话按钮
+                document.getElementById('sendChat').addEventListener('click', () => {
+                    this.sendChatMessage();
+                });
+
                 // 回车键发送命令
                 document.getElementById('commandInput').addEventListener('keydown', (e) => {
                     if (e.ctrlKey && e.key === 'Enter') {
                         this.sendCommand();
+                    }
+                });
+
+                // 回车键发送对话
+                document.getElementById('chatInput').addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') {
+                        this.sendChatMessage();
                     }
                 });
 
@@ -767,14 +788,85 @@
                 }
             }
 
+            async sendChatMessage() {
+                const input = document.getElementById('chatInput');
+                const message = input.value.trim();
+                
+                if (!message) return;
+                
+                // 添加用户消息到对话区域
+                this.addChatMessage('user', message);
+                input.value = '';
+                
+                try {
+                    const response = await fetch('/api/chat', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            message: message,
+                            user_id: document.getElementById('userIdInput').value || 'user_001'
+                        })
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (result.success) {
+                         this.addChatMessage('assistant', result.response);
+                     } else {
+                         this.addChatMessage('system', `错误: ${result.error}`);
+                     }
+                } catch (error) {
+                    this.addChatMessage('system', `发送失败: ${error}`);
+                }
+            }
+            
+            addChatMessage(sender, message) {
+                const container = document.getElementById('chatMessages');
+                const timestamp = new Date().toLocaleTimeString();
+                
+                const messageElement = document.createElement('div');
+                messageElement.className = 'log-entry fade-in';
+                
+                let senderClass = 'log-level-info';
+                let senderLabel = '[用户]';
+                
+                if (sender === 'assistant') {
+                    senderClass = 'log-level-success';
+                    senderLabel = '[机器人]';
+                } else if (sender === 'system') {
+                    senderClass = 'log-level-warning';
+                    senderLabel = '[系统]';
+                }
+                
+                messageElement.innerHTML = `
+                    <span class="log-timestamp">[${timestamp}] ${senderLabel}</span>
+                    <span class="${senderClass}">${message}</span>
+                `;
+                
+                container.appendChild(messageElement);
+                container.scrollTop = container.scrollHeight;
+            }
+
             generateSessionId() {
                 return 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
             }
         }
 
+        // 全局函数用于HTML事件处理
+        function handleChatKeyPress(event) {
+            if (event.key === 'Enter') {
+                const app = window.robotAgentApp;
+                if (app) {
+                    app.sendChatMessage();
+                }
+            }
+        }
+
         // 启动应用
         document.addEventListener('DOMContentLoaded', () => {
-            new RobotAgentMVP();
+            window.robotAgentApp = new RobotAgentMVP();
         });
     </script>
 </body>

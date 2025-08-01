@@ -1,535 +1,343 @@
-import asyncio
-import uuid
-from datetime import datetime
-from typing import Dict, Any, List, Optional
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse, FileResponse
-from contextlib import asynccontextmanager
+from pydantic import BaseModel
+from typing import Dict, Any, Optional, List
+import asyncio
 import uvicorn
-import psutil
 import os
-from pathlib import Path
 
-# 导入自定义模块
 from utils.config import Config
-from utils.logger import CustomLogger, PerformanceLogger
+from utils.logger import CustomLogger
 from services.qwen_service import QwenService
-from services.message_queue import MessageQueue
-from agents.memory_agent import MemoryAgent
 from agents.ros2_agent import ROS2Agent
-from models import (
-    ProcessCommandRequest, ProcessCommandResponse, SystemStatusResponse,
-    LogsResponse, MemoryRecordsResponse, WebSocketMessage, HealthCheckResponse,
-    PerformanceMetrics, APIResponse, QueueMessage, MessageType, Priority
-)
+from agents.memory_agent import MemoryAgent
 
-# 全局变量
-config: Config = None
-qwen_service: QwenService = None
-message_queue: MessageQueue = None
-memory_agent: MemoryAgent = None
-ros2_agent: ROS2Agent = None
-logger: CustomLogger = None
-perf_logger: PerformanceLogger = None
-websocket_connections: List[WebSocket] = []
-app_start_time: datetime = None
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """应用生命周期管理"""
-    global config, qwen_service, message_queue, memory_agent, ros2_agent, logger, perf_logger, app_start_time
-    
-    # 启动时初始化
-    app_start_time = datetime.now()
-    
-    # 加载配置
-    config = Config()
-    
-    # 初始化日志
-    logger = CustomLogger("FastAPI")
-    perf_logger = PerformanceLogger()
-    
-    logger.info("正在启动RobotAgent MVP服务...")
-    
-    try:
-        # 初始化服务
-        qwen_service = QwenService(config)
-        message_queue = MessageQueue(config)
-        
-        # 连接消息队列
-        await message_queue.connect()
-        
-        # 初始化Agent
-        memory_agent = MemoryAgent(config, message_queue)
-        ros2_agent = ROS2Agent(config, message_queue)
-        
-        # 启动Agent
-        await memory_agent.start()
-        await ros2_agent.start()
-        
-        logger.info("RobotAgent MVP服务启动成功")
-        
-        yield
-        
-    except Exception as e:
-        logger.error(f"服务启动失败: {str(e)}")
-        raise
-    
-    # 关闭时清理
-    logger.info("正在关闭RobotAgent MVP服务...")
-    
-    try:
-        # 停止Agent
-        if memory_agent:
-            await memory_agent.stop()
-        if ros2_agent:
-            await ros2_agent.stop()
-        
-        # 关闭服务
-        if message_queue:
-            await message_queue.disconnect()
-        if qwen_service:
-            await qwen_service.close()
-        
-        logger.info("RobotAgent MVP服务已关闭")
-        
-    except Exception as e:
-        logger.error(f"服务关闭时出错: {str(e)}")
+# 配置和日志
+config = Config()
+logger = CustomLogger("FastAPI")
 
 # 创建FastAPI应用
 app = FastAPI(
-    title="RobotAgent MVP API",
-    description="基于Qwen模型的机器人控制系统最小可行性验证",
-    version="1.0.0",
-    lifespan=lifespan
+    title="RobotAgent API",
+    description="智能机器人控制API",
+    version="1.0.0"
 )
 
-# 添加CORS中间件
+# 配置CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # 生产环境应限制具体域名
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# 静态文件服务
-static_dir = Path(__file__).parent.parent / "frontend"
-if static_dir.exists():
-    app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+# 挂载静态文件
+static_dir = os.path.join(os.path.dirname(__file__), "static")
+if os.path.exists(static_dir):
+    app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
-@app.get("/", response_class=HTMLResponse)
-async def root():
-    """根路径，返回前端页面"""
-    frontend_path = Path(__file__).parent.parent / "frontend" / "index.html"
-    if frontend_path.exists():
-        return FileResponse(frontend_path)
-    else:
-        return HTMLResponse("""
-        <html>
-            <head><title>RobotAgent MVP</title></head>
-            <body>
-                <h1>RobotAgent MVP API</h1>
-                <p>API文档: <a href="/docs">/docs</a></p>
-                <p>健康检查: <a href="/health">/health</a></p>
-            </body>
-        </html>
-        """)
+# 全局服务实例
+qwen_service = None
+ros2_agent = None
+memory_agent = None
 
-@app.get("/health", response_model=HealthCheckResponse)
-async def health_check():
-    """健康检查接口"""
-    try:
-        uptime = (datetime.now() - app_start_time).total_seconds()
-        
-        # 检查各组件健康状态
-        components = []
-        
-        # Qwen服务健康检查
-        qwen_health = await qwen_service.health_check()
-        components.append({
-            "name": "qwen_service",
-            "status": qwen_health.get("status", "unknown"),
-            "last_check": datetime.now(),
-            "details": qwen_health
-        })
-        
-        # 消息队列健康检查
-        queue_health = await message_queue.health_check()
-        components.append({
-            "name": "message_queue",
-            "status": queue_health.get("status", "unknown"),
-            "last_check": datetime.now(),
-            "details": queue_health
-        })
-        
-        # 记忆Agent健康检查
-        memory_health = await memory_agent.health_check()
-        components.append({
-            "name": "memory_agent",
-            "status": memory_health.get("status", "unknown"),
-            "last_check": datetime.now(),
-            "details": memory_health
-        })
-        
-        # ROS2 Agent健康检查
-        ros2_health = await ros2_agent.health_check()
-        components.append({
-            "name": "ros2_agent",
-            "status": ros2_health.get("status", "unknown"),
-            "last_check": datetime.now(),
-            "details": ros2_health
-        })
-        
-        # 判断整体健康状态
-        overall_status = "healthy"
-        for component in components:
-            if component["status"] != "healthy":
-                overall_status = "degraded"
-                break
-        
-        return HealthCheckResponse(
-            status=overall_status,
-            version="1.0.0",
-            uptime=uptime,
-            components=components
-        )
-        
-    except Exception as e:
-        logger.error(f"健康检查失败: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"健康检查失败: {str(e)}")
+# 请求模型
+class ChatRequest(BaseModel):
+    message: str
+    conversation_id: Optional[str] = "default"
+    user_id: Optional[str] = "default"
 
-@app.post("/api/process-command", response_model=ProcessCommandResponse)
-async def process_command(request: ProcessCommandRequest):
-    """处理用户命令"""
-    start_time = datetime.now()
-    message_id = str(uuid.uuid4())
+class CommandRequest(BaseModel):
+    command: str
+    user_id: Optional[str] = "default"
+
+# 响应模型
+class ChatResponse(BaseModel):
+    success: bool
+    user_reply: str
+    execution_status: Optional[str] = None
+    conversation_id: str
+    timestamp: float
+
+class StatusResponse(BaseModel):
+    status: str
+    message: str
+    details: Optional[Dict[str, Any]] = None
+
+@app.on_event("startup")
+async def startup_event():
+    """应用启动时初始化服务"""
+    global qwen_service, ros2_agent, memory_agent
     
     try:
-        logger.info(
-            f"接收到用户命令",
-            extra={
-                "user_id": request.user_id,
-                "session_id": request.session_id,
-                "input_length": len(request.input_text)
-            }
-        )
+        logger.info("正在启动RobotAgent服务...")
         
-        # 使用Qwen解析自然语言
-        with perf_logger.timer("qwen_parsing"):
-            parse_result = await qwen_service.parse_natural_language(
-                request.input_text,
-                request.user_id
-            )
+        # 初始化消息队列
+        from services.message_queue import MessageQueue
+        message_queue = MessageQueue(config)
         
-        if not parse_result["success"]:
-            raise HTTPException(
-                status_code=400,
-                detail=f"命令解析失败: {parse_result.get('error', '未知错误')}"
-            )
+        # 初始化服务
+        qwen_service = QwenService()
+        ros2_agent = ROS2Agent()
+        memory_agent = MemoryAgent(config, message_queue)
         
-        parsed_data = parse_result["result"]
+        # 启动代理
+        await ros2_agent.start()
+        await memory_agent.start()
         
-        # 创建用户输入消息
-        user_message = QueueMessage(
-            message_id=message_id,
-            message_type=MessageType.USER_INPUT,
-            data={
-                "user_id": request.user_id,
-                "session_id": request.session_id or str(uuid.uuid4()),
-                "input_text": request.input_text,
-                "language": request.language
-            },
-            priority=Priority.MEDIUM
-        )
+        # 启动状态反馈任务
+        asyncio.create_task(status_feedback_loop())
         
-        # 创建解析后的命令消息
-        parsed_message = QueueMessage(
-            message_id=message_id,
-            message_type=MessageType.PARSED_COMMAND,
-            data={
-                "user_id": request.user_id,
-                "session_id": request.session_id or str(uuid.uuid4()),
-                "input_text": request.input_text,
-                "intent": parsed_data["intent"],
-                "action": parsed_data["action"],
-                "parameters": parsed_data["parameters"],
-                "estimated_duration": parsed_data.get("estimated_duration", 5.0)
-            },
-            priority=Priority(parsed_data.get("priority", "medium"))
-        )
+        logger.info("RobotAgent服务启动成功")
         
-        # 发送消息到队列
-        with perf_logger.timer("queue_operations"):
-            # 发送到记忆Agent
-            await message_queue.send_to_memory_agent(user_message)
-            await message_queue.send_to_memory_agent(parsed_message)
+    except Exception as e:
+        logger.error(f"服务启动失败: {e}")
+        raise
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """应用关闭时清理资源"""
+    global ros2_agent, memory_agent
+    
+    try:
+        logger.info("正在关闭RobotAgent服务...")
+        
+        if ros2_agent:
+            await ros2_agent.stop()
+        
+        if memory_agent:
+            await memory_agent.stop()
+        
+        logger.info("RobotAgent服务已关闭")
+        
+    except Exception as e:
+        logger.error(f"服务关闭失败: {e}")
+
+async def status_feedback_loop():
+    """状态反馈循环 - 将执行状态转换为自然语言并存储"""
+    while True:
+        try:
+            # 获取ROS2执行状态
+            status_info = await ros2_agent.get_status_feedback()
             
-            # 发送到ROS2 Agent
-            await message_queue.send_to_ros2_agent(parsed_message)
+            if status_info:
+                # 将状态转换为自然语言
+                natural_language_status = await qwen_service.convert_status_to_natural_language(
+                    status_info["execution_result"]
+                )
+                
+                # 存储状态反馈到记忆
+                await memory_agent.store_interaction({
+                    "type": "status_feedback",
+                    "original_reply": status_info["user_reply"],
+                    "execution_result": status_info["execution_result"],
+                    "natural_language_status": natural_language_status,
+                    "timestamp": status_info["timestamp"]
+                })
+                
+                logger.info(f"状态反馈已处理: {natural_language_status}")
+            
+            await asyncio.sleep(1)  # 每秒检查一次
+            
+        except Exception as e:
+            logger.error(f"状态反馈循环错误: {e}")
+            await asyncio.sleep(5)
+
+@app.get("/")
+async def root():
+    """根路径"""
+    return {
+        "message": "RobotAgent API",
+        "version": "1.0.0",
+        "status": "running"
+    }
+
+@app.get("/health")
+async def health_check():
+    """健康检查"""
+    try:
+        health_status = {
+            "api": "healthy",
+            "qwen_service": "healthy" if qwen_service else "unhealthy",
+            "ros2_agent": ros2_agent.get_health_status() if ros2_agent else {"status": "unhealthy"},
+            "memory_agent": memory_agent.get_health_status() if memory_agent else {"status": "unhealthy"}
+        }
         
-        # 计算总处理时间
-        total_time = (datetime.now() - start_time).total_seconds()
+        overall_status = "healthy" if all(
+            status.get("status") == "healthy" if isinstance(status, dict) else status == "healthy"
+            for status in health_status.values()
+        ) else "unhealthy"
         
-        # 通过WebSocket广播状态更新
-        await broadcast_websocket_message({
-            "type": "command_processed",
-            "data": {
-                "message_id": message_id,
-                "intent": parsed_data["intent"],
-                "action": parsed_data["action"],
-                "status": "queued"
-            }
+        return {
+            "status": overall_status,
+            "services": health_status,
+            "timestamp": asyncio.get_event_loop().time()
+        }
+        
+    except Exception as e:
+        logger.error(f"健康检查失败: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"status": "unhealthy", "error": str(e)}
+        )
+
+@app.post("/api/chat", response_model=ChatResponse)
+async def robot_chat(request: ChatRequest):
+    """
+    机器人聊天接口 - 主要API接口
+    
+    用户通过此接口与机器人进行自然语言对话
+    系统会自动判断是否需要执行机器人动作
+    """
+    try:
+        logger.info(f"收到聊天请求: {request.message}")
+        
+        # 获取对话历史
+        conversation_history = await memory_agent.get_conversation_history(
+            request.conversation_id, 
+            limit=10
+        )
+        
+        # 获取最近的执行状态（用于状态反馈）
+        recent_status = await memory_agent.get_recent_status_feedback(request.conversation_id)
+        execution_status = recent_status.get("natural_language_status") if recent_status else None
+        
+        # 调用Qwen API获取响应
+        robot_response = await qwen_service.robot_chat(
+            user_input=request.message,
+            conversation_history=conversation_history,
+            execution_status=execution_status
+        )
+        
+        if not robot_response:
+            raise HTTPException(status_code=500, detail="无法获取机器人响应")
+        
+        # 存储用户输入到记忆
+        await memory_agent.store_interaction({
+            "type": "user_input",
+            "conversation_id": request.conversation_id,
+            "user_id": request.user_id,
+            "message": request.message,
+            "timestamp": asyncio.get_event_loop().time()
         })
         
-        logger.info(
-            f"命令处理完成",
-            extra={
-                "message_id": message_id,
-                "total_time": total_time,
-                "intent": parsed_data["intent"],
-                "action": parsed_data["action"]
-            }
-        )
+        # 处理机器人响应
+        execution_result = await ros2_agent.process_robot_response(robot_response)
         
-        return ProcessCommandResponse(
+        # 存储机器人响应到记忆
+        await memory_agent.store_interaction({
+            "type": "robot_response",
+            "conversation_id": request.conversation_id,
+            "user_id": request.user_id,
+            "user_reply": robot_response["user_reply"],
+            "ros2_command": robot_response["ros2_command"],
+            "execution_result": execution_result,
+            "timestamp": asyncio.get_event_loop().time()
+        })
+        
+        # 返回响应
+        return ChatResponse(
             success=True,
-            message="命令处理成功",
-            data=ProcessCommandResponse.CommandData(
-                message_id=message_id,
-                parsed_intent=parsed_data["intent"],
-                parsed_action=parsed_data["action"],
-                parameters=parsed_data["parameters"],
-                estimated_duration=parsed_data.get("estimated_duration"),
-                status="queued"
-            )
+            user_reply=robot_response["user_reply"],
+            execution_status=execution_result.get("message"),
+            conversation_id=request.conversation_id,
+            timestamp=asyncio.get_event_loop().time()
         )
         
-    except HTTPException:
-        raise
     except Exception as e:
-        total_time = (datetime.now() - start_time).total_seconds()
-        logger.error(
-            f"处理命令失败: {str(e)}",
-            extra={
-                "message_id": message_id,
-                "total_time": total_time,
-                "error": str(e)
-            }
-        )
-        raise HTTPException(status_code=500, detail=f"处理命令失败: {str(e)}")
+        logger.error(f"聊天请求处理失败: {e}")
+        raise HTTPException(status_code=500, detail=f"处理失败: {str(e)}")
 
-@app.get("/api/system-status", response_model=SystemStatusResponse)
+@app.post("/api/process-command")
+async def process_command(request: CommandRequest):
+    """
+    处理命令接口 - 兼容旧版本
+    
+    直接处理用户命令，不进行对话管理
+    """
+    try:
+        logger.info(f"收到命令请求: {request.command}")
+        
+        # 调用Qwen API
+        robot_response = await qwen_service.robot_chat(
+            user_input=request.command,
+            conversation_history=None,
+            execution_status=None
+        )
+        
+        if not robot_response:
+            raise HTTPException(status_code=500, detail="无法获取机器人响应")
+        
+        # 处理机器人响应
+        execution_result = await ros2_agent.process_robot_response(robot_response)
+        
+        return {
+            "success": True,
+            "user_reply": robot_response["user_reply"],
+            "execution_status": execution_result.get("message"),
+            "details": execution_result
+        }
+        
+    except Exception as e:
+        logger.error(f"命令处理失败: {e}")
+        raise HTTPException(status_code=500, detail=f"处理失败: {str(e)}")
+
+@app.get("/api/status")
 async def get_system_status():
     """获取系统状态"""
     try:
-        # 获取系统资源使用情况
-        cpu_usage = psutil.cpu_percent(interval=1)
-        memory = psutil.virtual_memory()
-        memory_usage = memory.percent
-        
-        uptime = (datetime.now() - app_start_time).total_seconds()
-        
-        # 获取各组件状态
-        qwen_health = await qwen_service.health_check()
-        queue_health = await message_queue.health_check()
-        memory_health = await memory_agent.health_check()
-        ros2_health = await ros2_agent.health_check()
-        
-        return SystemStatusResponse(
-            success=True,
-            message="系统状态获取成功",
-            data=SystemStatusResponse.StatusData(
-                qwen_service=qwen_health.get("status", "unknown"),
-                redis_connection=queue_health.get("status", "unknown"),
-                memory_agent=memory_health.get("status", "unknown"),
-                ros2_agent=ros2_health.get("status", "unknown"),
-                uptime=uptime,
-                memory_usage=memory_usage,
-                cpu_usage=cpu_usage
-            )
-        )
-        
-    except Exception as e:
-        logger.error(f"获取系统状态失败: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"获取系统状态失败: {str(e)}")
-
-@app.get("/api/logs", response_model=LogsResponse)
-async def get_logs(page: int = 1, page_size: int = 50, level: str = None):
-    """获取系统日志"""
-    try:
-        # 这里简化实现，实际应该从日志文件读取
-        logs = []
-        
-        # 模拟日志数据
-        sample_logs = [
-            {
-                "timestamp": datetime.now().isoformat(),
-                "level": "INFO",
-                "component": "FastAPI",
-                "message": "系统运行正常"
+        return {
+            "qwen_service": {
+                "total_requests": qwen_service.total_requests,
+                "successful_requests": qwen_service.successful_requests,
+                "failed_requests": qwen_service.failed_requests,
+                "average_response_time": qwen_service.total_response_time / max(qwen_service.total_requests, 1)
             },
-            {
-                "timestamp": datetime.now().isoformat(),
-                "level": "INFO",
-                "component": "QwenService",
-                "message": f"已处理 {qwen_service.total_calls} 次API调用"
-            }
-        ]
-        
-        # 应用过滤和分页
-        filtered_logs = sample_logs
-        if level:
-            filtered_logs = [log for log in filtered_logs if log["level"] == level.upper()]
-        
-        start_idx = (page - 1) * page_size
-        end_idx = start_idx + page_size
-        page_logs = filtered_logs[start_idx:end_idx]
-        
-        return LogsResponse(
-            success=True,
-            message="日志获取成功",
-            data=LogsResponse.LogsData(
-                logs=[LogsResponse.LogEntry(**log) for log in page_logs],
-                total_count=len(filtered_logs),
-                page=page,
-                page_size=page_size
-            )
-        )
+            "ros2_agent": ros2_agent.get_status(),
+            "memory_agent": memory_agent.get_status()
+        }
         
     except Exception as e:
-        logger.error(f"获取日志失败: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"获取日志失败: {str(e)}")
+        logger.error(f"获取系统状态失败: {e}")
+        raise HTTPException(status_code=500, detail=f"获取状态失败: {str(e)}")
 
-@app.get("/api/memory-records", response_model=MemoryRecordsResponse)
-async def get_memory_records(limit: int = 20):
-    """获取记忆记录"""
+@app.get("/api/conversation/{conversation_id}/history")
+async def get_conversation_history(conversation_id: str, limit: int = 20):
+    """获取对话历史"""
     try:
-        records = await memory_agent.get_memory_records(limit)
-        
-        return MemoryRecordsResponse(
-            success=True,
-            message="记忆记录获取成功",
-            data=MemoryRecordsResponse.MemoryRecordsData(
-                records=[
-                    MemoryRecordsResponse.MemoryRecord(**record)
-                    for record in records
-                ],
-                total_count=len(records),
-                total_size=sum(record["size"] for record in records)
-            )
-        )
+        history = await memory_agent.get_conversation_history(conversation_id, limit)
+        return {
+            "conversation_id": conversation_id,
+            "history": history,
+            "count": len(history)
+        }
         
     except Exception as e:
-        logger.error(f"获取记忆记录失败: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"获取记忆记录失败: {str(e)}")
+        logger.error(f"获取对话历史失败: {e}")
+        raise HTTPException(status_code=500, detail=f"获取历史失败: {str(e)}")
 
-@app.get("/api/performance-metrics", response_model=PerformanceMetrics)
-async def get_performance_metrics():
-    """获取性能指标"""
+@app.delete("/api/conversation/{conversation_id}")
+async def clear_conversation(conversation_id: str):
+    """清除对话历史"""
     try:
-        # 系统指标
-        cpu_usage = psutil.cpu_percent()
-        memory = psutil.virtual_memory()
-        disk = psutil.disk_usage('/')
-        
-        # 应用指标
-        qwen_stats = qwen_service.get_stats()
-        queue_stats = await message_queue.get_all_queue_stats()
-        
-        return PerformanceMetrics(
-            cpu_usage=cpu_usage,
-            memory_usage=memory.percent,
-            disk_usage=disk.percent,
-            active_sessions=len(websocket_connections),
-            total_requests=qwen_stats["total_calls"],
-            error_rate=qwen_stats["error_count"] / max(qwen_stats["total_calls"], 1) * 100,
-            average_response_time=perf_logger.get_average_time("qwen_parsing"),
-            qwen_api_calls=qwen_stats["total_calls"],
-            qwen_avg_latency=perf_logger.get_average_time("qwen_parsing"),
-            redis_connections=1 if queue_stats.get("connection_status") == "connected" else 0,
-            ros2_commands_sent=ros2_agent.processed_count,
-            memory_records_created=memory_agent.processed_count
-        )
+        await memory_agent.clear_conversation(conversation_id)
+        return {
+            "success": True,
+            "message": f"对话 {conversation_id} 已清除"
+        }
         
     except Exception as e:
-        logger.error(f"获取性能指标失败: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"获取性能指标失败: {str(e)}")
-
-@app.websocket("/ws")
-async def websocket_endpoint(websocket: WebSocket):
-    """WebSocket连接端点"""
-    await websocket.accept()
-    websocket_connections.append(websocket)
-    
-    try:
-        logger.info("新的WebSocket连接已建立")
-        
-        # 发送欢迎消息
-        await websocket.send_json({
-            "type": "connection_established",
-            "data": {"message": "WebSocket连接已建立"},
-            "timestamp": datetime.now().isoformat()
-        })
-        
-        # 保持连接
-        while True:
-            try:
-                # 接收客户端消息
-                data = await websocket.receive_json()
-                
-                # 处理客户端消息（如心跳等）
-                if data.get("type") == "ping":
-                    await websocket.send_json({
-                        "type": "pong",
-                        "timestamp": datetime.now().isoformat()
-                    })
-                    
-            except WebSocketDisconnect:
-                break
-            except Exception as e:
-                logger.error(f"WebSocket消息处理错误: {str(e)}")
-                break
-                
-    except WebSocketDisconnect:
-        pass
-    except Exception as e:
-        logger.error(f"WebSocket连接错误: {str(e)}")
-    finally:
-        if websocket in websocket_connections:
-            websocket_connections.remove(websocket)
-        logger.info("WebSocket连接已断开")
-
-async def broadcast_websocket_message(message: Dict[str, Any]):
-    """广播WebSocket消息"""
-    if not websocket_connections:
-        return
-    
-    message_with_timestamp = {
-        **message,
-        "timestamp": datetime.now().isoformat()
-    }
-    
-    # 移除已断开的连接
-    disconnected = []
-    for websocket in websocket_connections:
-        try:
-            await websocket.send_json(message_with_timestamp)
-        except:
-            disconnected.append(websocket)
-    
-    # 清理断开的连接
-    for websocket in disconnected:
-        websocket_connections.remove(websocket)
+        logger.error(f"清除对话失败: {e}")
+        raise HTTPException(status_code=500, detail=f"清除失败: {str(e)}")
 
 if __name__ == "__main__":
-    # 运行服务器
     uvicorn.run(
         "app:app",
         host="0.0.0.0",
         port=8000,
-        reload=False,  # 生产环境应设为False
+        reload=True,
         log_level="info"
     )

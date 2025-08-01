@@ -1,0 +1,77 @@
+2025-08-01 13:09:32,999 - QwenService - INFO - QwenService初始化完成
+2025-08-01 13:09:59,845 - QwenService - INFO - QwenService初始化完成
+2025-08-01 13:11:12,314 - QwenService - INFO - QwenService初始化完成
+2025-08-01 13:11:28,091 - QwenService - ERROR - 健康检查失败: 'PerformanceLogger' object has no attribute 'timer'
+2025-08-01 13:11:34,130 - QwenService - ERROR - 健康检查失败: 'PerformanceLogger' object has no attribute 'timer'
+2025-08-01 13:11:39,133 - QwenService - ERROR - 健康检查失败: 'PerformanceLogger' object has no attribute 'timer'
+2025-08-01 13:11:44,138 - QwenService - ERROR - 健康检查失败: 'PerformanceLogger' object has no attribute 'timer'
+2025-08-01 13:11:49,137 - QwenService - ERROR - 健康检查失败: 'PerformanceLogger' object has no attribute 'timer'
+2025-08-01 13:11:54,132 - QwenService - ERROR - 健康检查失败: 'PerformanceLogger' object has no attribute 'timer'
+2025-08-01 13:11:59,136 - QwenService - ERROR - 健康检查失败: 'PerformanceLogger' object has no attribute 'timer'
+2025-08-01 13:12:04,135 - QwenService - ERROR - 健康检查失败: 'PerformanceLogger' object has no attribute 'timer'
+2025-08-01 13:12:09,132 - QwenService - ERROR - 健康检查失败: 'PerformanceLogger' object has no attribute 'timer'
+2025-08-01 13:12:14,132 - QwenService - ERROR - 健康检查失败: 'PerformanceLogger' object has no attribute 'timer'
+2025-08-01 13:12:19,130 - QwenService - ERROR - 健康检查失败: 'PerformanceLogger' object has no attribute 'timer'
+2025-08-01 13:12:24,122 - QwenService - ERROR - 健康检查失败: 'PerformanceLogger' object has no attribute 'timer'
+2025-08-01 13:12:29,139 - QwenService - ERROR - 健康检查失败: 'PerformanceLogger' object has no attribute 'timer'
+2025-08-01 13:12:34,125 - QwenService - ERROR - 健康检查失败: 'PerformanceLogger' object has no attribute 'timer'
+2025-08-01 13:12:39,135 - QwenService - ERROR - 健康检查失败: 'PerformanceLogger' object has no attribute 'timer'
+2025-08-01 13:12:44,134 - QwenService - ERROR - 健康检查失败: 'PerformanceLogger' object has no attribute 'timer'
+2025-08-01 13:12:49,125 - QwenService - ERROR - 健康检查失败: 'PerformanceLogger' object has no attribute 'timer'
+2025-08-01 13:12:54,128 - QwenService - ERROR - 健康检查失败: 'PerformanceLogger' object has no attribute 'timer'
+2025-08-01 13:12:59,123 - QwenService - ERROR - 健康检查失败: 'PerformanceLogger' object has no attribute 'timer'
+2025-08-01 13:13:04,128 - QwenService - ERROR - 健康检查失败: 'PerformanceLogger' object has no attribute 'timer'
+2025-08-01 13:13:09,135 - QwenService - ERROR - 健康检查失败: 'PerformanceLogger' object has no attribute 'timer'
+2025-08-01 13:13:14,129 - QwenService - ERROR - 健康检查失败: 'PerformanceLogger' object has no attribute 'timer'
+2025-08-01 13:13:19,134 - QwenService - ERROR - 健康检查失败: 'PerformanceLogger' object has no attribute 'timer'
+2025-08-01 13:13:24,126 - QwenService - ERROR - 健康检查失败: 'PerformanceLogger' object has no attribute 'timer'
+2025-08-01 13:13:29,128 - QwenService - ERROR - 健康检查失败: 'PerformanceLogger' object has no attribute 'timer'
+2025-08-01 13:13:34,137 - QwenService - ERROR - 健康检查失败: 'PerformanceLogger' object has no attribute 'timer'
+2025-08-01 13:13:39,125 - QwenService - ERROR - 健康检查失败: 'PerformanceLogger' object has no attribute 'timer'
+2025-08-01 13:13:44,131 - QwenService - ERROR - 健康检查失败: 'PerformanceLogger' object has no attribute 'timer'
+2025-08-01 13:13:49,132 - QwenService - ERROR - 健康检查失败: 'PerformanceLogger' object has no attribute 'timer'
+2025-08-01 13:13:54,126 - QwenService - ERROR - 健康检查失败: 'PerformanceLogger' object has no attribute 'timer'
+2025-08-01 13:13:59,130 - QwenService - ERROR - 健康检查失败: 'PerformanceLogger' object has no attribute 'timer'
+2025-08-01 13:14:04,126 - QwenService - ERROR - 健康检查失败: 'PerformanceLogger' object has no attribute 'timer'
+2025-08-01 13:14:09,126 - QwenService - ERROR - 健康检查失败: 'PerformanceLogger' object has no attribute 'timer'
+2025-08-01 13:14:14,134 - QwenService - ERROR - 健康检查失败: 'PerformanceLogger' object has no attribute 'timer'
+2025-08-01 13:14:19,125 - QwenService - ERROR - 健康检查失败: 'PerformanceLogger' object has no attribute 'timer'
+2025-08-01 13:14:24,125 - QwenService - ERROR - 健康检查失败: 'PerformanceLogger' object has no attribute 'timer'
+2025-08-01 13:14:29,128 - QwenService - ERROR - 健康检查失败: 'PerformanceLogger' object has no attribute 'timer'
+2025-08-01 13:14:34,121 - QwenService - ERROR - 健康检查失败: 'PerformanceLogger' object has no attribute 'timer'
+2025-08-01 13:14:39,132 - QwenService - ERROR - 健康检查失败: 'PerformanceLogger' object has no attribute 'timer'
+2025-08-01 13:14:44,128 - QwenService - ERROR - 健康检查失败: 'PerformanceLogger' object has no attribute 'timer'
+2025-08-01 13:14:49,138 - QwenService - ERROR - 健康检查失败: 'PerformanceLogger' object has no attribute 'timer'
+2025-08-01 13:14:54,124 - QwenService - ERROR - 健康检查失败: 'PerformanceLogger' object has no attribute 'timer'
+2025-08-01 13:14:59,129 - QwenService - ERROR - 健康检查失败: 'PerformanceLogger' object has no attribute 'timer'
+2025-08-01 13:15:04,138 - QwenService - ERROR - 健康检查失败: 'PerformanceLogger' object has no attribute 'timer'
+2025-08-01 13:15:09,137 - QwenService - ERROR - 健康检查失败: 'PerformanceLogger' object has no attribute 'timer'
+2025-08-01 13:15:14,131 - QwenService - ERROR - 健康检查失败: 'PerformanceLogger' object has no attribute 'timer'
+2025-08-01 13:15:19,137 - QwenService - ERROR - 健康检查失败: 'PerformanceLogger' object has no attribute 'timer'
+2025-08-01 13:15:24,126 - QwenService - ERROR - 健康检查失败: 'PerformanceLogger' object has no attribute 'timer'
+2025-08-01 13:15:29,124 - QwenService - ERROR - 健康检查失败: 'PerformanceLogger' object has no attribute 'timer'
+2025-08-01 13:15:34,131 - QwenService - ERROR - 健康检查失败: 'PerformanceLogger' object has no attribute 'timer'
+2025-08-01 13:15:39,121 - QwenService - ERROR - 健康检查失败: 'PerformanceLogger' object has no attribute 'timer'
+2025-08-01 13:15:44,133 - QwenService - ERROR - 健康检查失败: 'PerformanceLogger' object has no attribute 'timer'
+2025-08-01 13:15:49,120 - QwenService - ERROR - 健康检查失败: 'PerformanceLogger' object has no attribute 'timer'
+2025-08-01 13:36:30,436 - QwenService - WARNING - 环境变量 DASHSCOPE_API_KEY 未设置，将使用测试模式
+2025-08-01 13:36:30,436 - QwenService - INFO - QwenService初始化完成
+2025-08-01 13:36:49,838 - QwenService - WARNING - 环境变量 DASHSCOPE_API_KEY 未设置，将使用测试模式
+2025-08-01 13:36:49,838 - QwenService - INFO - QwenService初始化完成
+2025-08-01 13:38:00,410 - QwenService - WARNING - 环境变量 DASHSCOPE_API_KEY 未设置，将使用测试模式
+2025-08-01 13:38:00,410 - QwenService - INFO - QwenService初始化完成
+2025-08-01 13:38:48,640 - QwenService - WARNING - 环境变量 DASHSCOPE_API_KEY 未设置，将使用测试模式
+2025-08-01 13:38:48,641 - QwenService - INFO - QwenService初始化完成
+2025-08-01 13:38:58,522 - QwenService - WARNING - 环境变量 DASHSCOPE_API_KEY 未设置，将使用测试模式
+2025-08-01 13:38:58,523 - QwenService - INFO - QwenService初始化完成
+2025-08-01 13:39:40,942 - QwenService - WARNING - 环境变量 DASHSCOPE_API_KEY 未设置，将使用测试模式
+2025-08-01 13:39:40,942 - QwenService - INFO - QwenService初始化完成
+2025-08-01 13:46:43,078 - QwenService - WARNING - 环境变量 DASHSCOPE_API_KEY 未设置，将使用测试模式
+2025-08-01 13:46:43,079 - QwenService - INFO - QwenService初始化完成
+2025-08-01 13:46:58,559 - QwenService - WARNING - 环境变量 DASHSCOPE_API_KEY 未设置，将使用测试模式
+2025-08-01 13:46:58,559 - QwenService - INFO - QwenService初始化完成
+2025-08-01 13:59:22,138 - QwenService - WARNING - 环境变量 DASHSCOPE_API_KEY 未设置，将使用测试模式
+2025-08-01 13:59:22,139 - QwenService - INFO - QwenService初始化完成
+2025-08-01 14:02:05,495 - QwenService - WARNING - 环境变量 DASHSCOPE_API_KEY 未设置，将使用测试模式
+2025-08-01 14:02:05,495 - QwenService - INFO - QwenService初始化完成
+2025-08-01 14:03:00,014 - QwenService - INFO - QwenService初始化完成

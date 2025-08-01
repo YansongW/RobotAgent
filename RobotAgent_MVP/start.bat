@@ -23,6 +23,24 @@ if errorlevel 1 (
 REM 设置环境变量
 set PYTHONPATH=%PYTHONPATH%;%cd%\backend
 
+REM 检查并设置 DASHSCOPE_API_KEY
+if not defined DASHSCOPE_API_KEY (
+    echo 检查系统环境变量中的 DASHSCOPE_API_KEY...
+    for /f "tokens=*" %%i in ('powershell -Command "[System.Environment]::GetEnvironmentVariable('DASHSCOPE_API_KEY', 'Machine')"') do set DASHSCOPE_API_KEY=%%i
+    
+    if not defined DASHSCOPE_API_KEY (
+        for /f "tokens=*" %%i in ('powershell -Command "[System.Environment]::GetEnvironmentVariable('DASHSCOPE_API_KEY', 'User')"') do set DASHSCOPE_API_KEY=%%i
+    )
+    
+    if defined DASHSCOPE_API_KEY (
+        echo 成功从系统环境变量加载 DASHSCOPE_API_KEY
+    ) else (
+        echo 警告: 未找到 DASHSCOPE_API_KEY 环境变量，将使用测试模式
+    )
+) else (
+    echo DASHSCOPE_API_KEY 已设置
+)
+
 REM 创建必要的目录
 if not exist logs mkdir logs
 if not exist memory_records mkdir memory_records

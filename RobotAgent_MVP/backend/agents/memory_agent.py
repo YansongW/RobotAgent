@@ -2,7 +2,7 @@ import os
 import json
 import asyncio
 from datetime import datetime
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from pathlib import Path
 from utils.config import Config
 from utils.logger import CustomLogger
@@ -18,7 +18,7 @@ class MemoryAgent:
         self.logger = CustomLogger("MemoryAgent")
         
         # 记忆存储路径
-        self.memory_dir = Path(self.config.memory_agent.storage_path)
+        self.memory_dir = Path(self.config.memory_agent["storage_path"])
         self.memory_dir.mkdir(parents=True, exist_ok=True)
         
         # 运行状态

@@ -8,9 +8,9 @@ class Config:
     
     def __init__(self, config_path: str = None):
         if config_path is None:
-            # 默认配置文件路径
+            # 默认配置文件路径 - 指向项目根目录的config文件夹
             config_path = os.path.join(
-                os.path.dirname(os.path.dirname(__file__)), 
+                os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 
                 "config", 
                 "config.yaml"
             )

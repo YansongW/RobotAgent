@@ -42,14 +42,15 @@ class SystemStatusResponse(APIResponse):
     
     data: Optional[StatusData] = None
 
+class LogEntry(BaseModel):
+    """日志条目模型"""
+    timestamp: str = Field(..., description="时间戳")
+    level: str = Field(..., description="日志级别")
+    component: str = Field(..., description="组件名称")
+    message: str = Field(..., description="日志消息")
+
 class LogsResponse(APIResponse):
     """日志响应模型"""
-    class LogEntry(BaseModel):
-        timestamp: str = Field(..., description="时间戳")
-        level: str = Field(..., description="日志级别")
-        component: str = Field(..., description="组件名称")
-        message: str = Field(..., description="日志消息")
-    
     class LogsData(BaseModel):
         logs: List[LogEntry] = Field(..., description="日志条目列表")
         total_count: int = Field(..., description="总日志数量")
@@ -58,14 +59,15 @@ class LogsResponse(APIResponse):
     
     data: Optional[LogsData] = None
 
+class MemoryRecord(BaseModel):
+    """记忆记录模型"""
+    filename: str = Field(..., description="文件名")
+    created_time: datetime = Field(..., description="创建时间")
+    size: int = Field(..., description="文件大小（字节）")
+    interaction_count: int = Field(..., description="交互次数")
+
 class MemoryRecordsResponse(APIResponse):
     """记忆记录响应模型"""
-    class MemoryRecord(BaseModel):
-        filename: str = Field(..., description="文件名")
-        created_time: datetime = Field(..., description="创建时间")
-        size: int = Field(..., description="文件大小（字节）")
-        interaction_count: int = Field(..., description="交互次数")
-    
     class MemoryRecordsData(BaseModel):
         records: List[MemoryRecord] = Field(..., description="记忆记录列表")
         total_count: int = Field(..., description="总记录数量")

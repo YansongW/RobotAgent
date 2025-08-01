@@ -12,14 +12,47 @@ server:
   workers: 1
   reload: true
 
-# Qwen模型配置
+# Qwen模型配置 - 使用DashScope API
 qwen:
-  api_key: "your_qwen_api_key_here"
-  model_name: "qwen-turbo"
+  # DashScope API配置
+  api_key: "${DASHSCOPE_API_KEY}"  # 从环境变量读取
+  model_name: "qwen-max-latest"    # 推荐使用最新模型
   base_url: "https://dashscope.aliyuncs.com/api/v1"
+  
+  # 生成参数
   max_tokens: 2048
   temperature: 0.1
+  top_p: 0.8
+  
+  # 请求配置
   timeout: 30
+  max_retries: 3
+  retry_delay: 1.0
+  
+  # 功能开关
+  enable_search: false
+  enable_function_call: true
+  
+  # 系统提示词
+  system_prompt: |
+    你是一个专业的机器人控制助手，能够将自然语言指令转换为机器人控制命令。
+    请根据用户的自然语言输入，解析出对应的机器人动作意图和参数。
+    
+    输出格式必须是JSON，包含以下字段：
+    - intent: 意图类型（如move_to_position, gripper_control等）
+    - action: 具体动作（如move_arm, open_gripper等）
+    - parameters: 动作参数（如位置坐标、角度等）
+    - confidence: 置信度（0-1之间的浮点数）
+    
+    支持的意图类型：
+    - move_to_position: 移动到指定位置
+    - gripper_control: 夹爪控制
+    - joint_control: 关节控制
+    - pick_object: 抓取物体
+    - place_object: 放置物体
+    - get_current_pose: 获取当前位姿
+    - stop_motion: 停止运动
+    - go_home: 回到初始位置
 
 # Redis配置
 redis:

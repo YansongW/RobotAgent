@@ -1,0 +1,36 @@
+2025-08-01 13:09:59,848 - ROS2Agent - ERROR - 加载ROS2命令映射失败: 'dict' object has no attribute 'config_dir'
+2025-08-01 13:09:59,849 - ROS2Agent - INFO - ROS2 Agent已启动 - 准备接收Qwen API的JSON指令
+2025-08-01 13:09:59,851 - ROS2Agent - ERROR - ROS2环境检查失败: [WinError 2] 系统找不到指定的文件。
+2025-08-01 13:11:12,317 - ROS2Agent - INFO - ROS2 Agent已启动 - 准备接收Qwen API的JSON指令
+2025-08-01 13:11:12,320 - ROS2Agent - ERROR - ROS2环境检查失败: [WinError 2] 系统找不到指定的文件。
+2025-08-01 13:36:30,441 - ROS2Agent - INFO - ROS2Agent初始化完成
+2025-08-01 13:36:49,845 - ROS2Agent - INFO - ROS2Agent初始化完成
+2025-08-01 13:38:00,419 - ROS2Agent - INFO - ROS2Agent初始化完成
+2025-08-01 13:38:48,653 - ROS2Agent - INFO - ROS2Agent初始化完成
+2025-08-01 13:38:58,533 - ROS2Agent - INFO - ROS2Agent初始化完成
+2025-08-01 13:39:40,947 - ROS2Agent - INFO - ROS2Agent初始化完成
+2025-08-01 13:46:43,084 - ROS2Agent - INFO - ROS2Agent初始化完成
+2025-08-01 13:46:43,085 - ROS2Agent - INFO - 启动ROS2Agent...
+2025-08-01 13:46:43,085 - ROS2Agent - INFO - 成功加载命令映射: 8 个命令
+2025-08-01 13:46:43,087 - ROS2Agent - WARNING - ROS2环境检查失败: [WinError 2] 系统找不到指定的文件。
+2025-08-01 13:46:43,088 - ROS2Agent - INFO - ROS2Agent启动成功
+2025-08-01 13:46:58,567 - ROS2Agent - INFO - ROS2Agent初始化完成
+2025-08-01 13:46:58,569 - ROS2Agent - INFO - 启动ROS2Agent...
+2025-08-01 13:46:58,570 - ROS2Agent - INFO - 成功加载命令映射: 8 个命令
+2025-08-01 13:46:58,572 - ROS2Agent - WARNING - ROS2环境检查失败: [WinError 2] 系统找不到指定的文件。
+2025-08-01 13:46:58,573 - ROS2Agent - INFO - ROS2Agent启动成功
+2025-08-01 13:59:22,149 - ROS2Agent - INFO - ROS2Agent初始化完成
+2025-08-01 13:59:22,150 - ROS2Agent - INFO - 启动ROS2Agent...
+2025-08-01 13:59:22,151 - ROS2Agent - INFO - 成功加载命令映射: 8 个命令
+2025-08-01 13:59:22,155 - ROS2Agent - WARNING - ROS2环境检查失败: [WinError 2] 系统找不到指定的文件。
+2025-08-01 13:59:22,156 - ROS2Agent - INFO - ROS2Agent启动成功
+2025-08-01 14:02:05,503 - ROS2Agent - INFO - ROS2Agent初始化完成
+2025-08-01 14:02:05,505 - ROS2Agent - INFO - 启动ROS2Agent...
+2025-08-01 14:02:05,506 - ROS2Agent - INFO - 成功加载命令映射: 8 个命令
+2025-08-01 14:02:05,511 - ROS2Agent - WARNING - ROS2环境检查失败: [WinError 2] 系统找不到指定的文件。
+2025-08-01 14:02:05,511 - ROS2Agent - INFO - ROS2Agent启动成功
+2025-08-01 14:03:00,020 - ROS2Agent - INFO - ROS2Agent初始化完成
+2025-08-01 14:03:00,020 - ROS2Agent - INFO - 启动ROS2Agent...
+2025-08-01 14:03:00,021 - ROS2Agent - INFO - 成功加载命令映射: 8 个命令
+2025-08-01 14:03:00,023 - ROS2Agent - WARNING - ROS2环境检查失败: [WinError 2] 系统找不到指定的文件。
+2025-08-01 14:03:00,023 - ROS2Agent - INFO - ROS2Agent启动成功
