@@ -1,0 +1,781 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RobotAgent MVP - 机器人控制系统</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --primary-color: #2563eb;
+            --secondary-color: #64748b;
+            --success-color: #10b981;
+            --warning-color: #f59e0b;
+            --danger-color: #ef4444;
+            --dark-color: #1e293b;
+            --light-color: #f8fafc;
+        }
+
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        .main-container {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            margin: 20px;
+            padding: 30px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid var(--primary-color);
+        }
+
+        .header h1 {
+            color: var(--primary-color);
+            font-weight: 700;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            color: var(--secondary-color);
+            font-size: 1.1rem;
+        }
+
+        .status-card {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.08);
+            border-left: 4px solid var(--primary-color);
+        }
+
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 8px;
+        }
+
+        .status-healthy { background-color: var(--success-color); }
+        .status-unhealthy { background-color: var(--danger-color); }
+        .status-unknown { background-color: var(--secondary-color); }
+
+        .command-input {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            margin-bottom: 30px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.08);
+        }
+
+        .command-input textarea {
+            border: 2px solid #e2e8f0;
+            border-radius: 10px;
+            padding: 15px;
+            font-size: 1rem;
+            transition: all 0.3s ease;
+        }
+
+        .command-input textarea:focus {
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--primary-color), #3b82f6);
+            border: none;
+            border-radius: 10px;
+            padding: 12px 30px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(37, 99, 235, 0.3);
+        }
+
+        .log-container {
+            background: var(--dark-color);
+            color: white;
+            border-radius: 15px;
+            padding: 20px;
+            height: 400px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9rem;
+        }
+
+        .log-entry {
+            margin-bottom: 8px;
+            padding: 5px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .log-timestamp {
+            color: var(--secondary-color);
+            font-size: 0.8rem;
+        }
+
+        .log-level-info { color: #60a5fa; }
+        .log-level-warning { color: #fbbf24; }
+        .log-level-error { color: #f87171; }
+        .log-level-success { color: #34d399; }
+
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .metric-card {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            text-align: center;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.08);
+            transition: transform 0.3s ease;
+        }
+
+        .metric-card:hover {
+            transform: translateY(-5px);
+        }
+
+        .metric-value {
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--primary-color);
+            margin-bottom: 5px;
+        }
+
+        .metric-label {
+            color: var(--secondary-color);
+            font-size: 0.9rem;
+        }
+
+        .connection-status {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 10px 20px;
+            border-radius: 25px;
+            color: white;
+            font-weight: 600;
+            z-index: 1000;
+        }
+
+        .connected { background-color: var(--success-color); }
+        .disconnected { background-color: var(--danger-color); }
+
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 1s ease-in-out infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .fade-in {
+            animation: fadeIn 0.5s ease-in;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .tab-content {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.08);
+        }
+
+        .nav-tabs .nav-link {
+            border: none;
+            border-radius: 10px 10px 0 0;
+            color: var(--secondary-color);
+            font-weight: 600;
+            margin-right: 5px;
+        }
+
+        .nav-tabs .nav-link.active {
+            background-color: var(--primary-color);
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <!-- 连接状态指示器 -->
+    <div id="connectionStatus" class="connection-status disconnected">
+        <i class="fas fa-wifi"></i> 连接中...
+    </div>
+
+    <div class="container-fluid">
+        <div class="main-container">
+            <!-- 头部 -->
+            <div class="header">
+                <h1><i class="fas fa-robot"></i> RobotAgent MVP</h1>
+                <p>基于Qwen模型的智能机器人控制系统</p>
+            </div>
+
+            <!-- 系统状态 -->
+            <div class="row mb-4">
+                <div class="col-12">
+                    <div class="status-card">
+                        <h5><i class="fas fa-heartbeat"></i> 系统状态</h5>
+                        <div class="row" id="systemStatus">
+                            <div class="col-md-3">
+                                <span class="status-indicator status-unknown"></span>
+                                <span>Qwen服务: <span id="qwenStatus">检查中...</span></span>
+                            </div>
+                            <div class="col-md-3">
+                                <span class="status-indicator status-unknown"></span>
+                                <span>Redis连接: <span id="redisStatus">检查中...</span></span>
+                            </div>
+                            <div class="col-md-3">
+                                <span class="status-indicator status-unknown"></span>
+                                <span>记忆Agent: <span id="memoryStatus">检查中...</span></span>
+                            </div>
+                            <div class="col-md-3">
+                                <span class="status-indicator status-unknown"></span>
+                                <span>ROS2 Agent: <span id="ros2Status">检查中...</span></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 性能指标 -->
+            <div class="metrics-grid" id="metricsGrid">
+                <!-- 动态生成 -->
+            </div>
+
+            <!-- 主要功能区域 -->
+            <div class="row">
+                <div class="col-lg-6">
+                    <!-- 命令输入 -->
+                    <div class="command-input">
+                        <h5><i class="fas fa-microphone"></i> 自然语言命令输入</h5>
+                        <div class="mb-3">
+                            <textarea 
+                                id="commandInput" 
+                                class="form-control" 
+                                rows="4" 
+                                placeholder="请输入自然语言指令，例如：&#10;- 移动机械臂到位置 (0.5, 0.3, 0.2)&#10;- 抓取桌上的红色方块&#10;- 将夹爪打开&#10;- 回到初始位置"
+                            ></textarea>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <label for="userIdInput" class="form-label">用户ID:</label>
+                                <input type="text" id="userIdInput" class="form-control d-inline-block" style="width: 150px;" value="user_001">
+                            </div>
+                            <button id="sendCommand" class="btn btn-primary">
+                                <i class="fas fa-paper-plane"></i> 发送命令
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 命令历史 -->
+                    <div class="status-card">
+                        <h5><i class="fas fa-history"></i> 命令历史</h5>
+                        <div id="commandHistory" style="max-height: 300px; overflow-y: auto;">
+                            <p class="text-muted">暂无命令历史</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-lg-6">
+                    <!-- 标签页 -->
+                    <ul class="nav nav-tabs" id="mainTabs" role="tablist">
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link active" id="logs-tab" data-bs-toggle="tab" data-bs-target="#logs" type="button" role="tab">
+                                <i class="fas fa-file-alt"></i> 实时日志
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="memory-tab" data-bs-toggle="tab" data-bs-target="#memory" type="button" role="tab">
+                                <i class="fas fa-brain"></i> 记忆记录
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="ros2-tab" data-bs-toggle="tab" data-bs-target="#ros2" type="button" role="tab">
+                                <i class="fas fa-cogs"></i> ROS2状态
+                            </button>
+                        </li>
+                    </ul>
+
+                    <div class="tab-content" id="mainTabContent">
+                        <!-- 实时日志 -->
+                        <div class="tab-pane fade show active" id="logs" role="tabpanel">
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <h6>系统日志</h6>
+                                <button id="clearLogs" class="btn btn-sm btn-outline-secondary">
+                                    <i class="fas fa-trash"></i> 清空
+                                </button>
+                            </div>
+                            <div id="logContainer" class="log-container">
+                                <div class="log-entry">
+                                    <span class="log-timestamp">[系统启动]</span>
+                                    <span class="log-level-info">等待连接...</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 记忆记录 -->
+                        <div class="tab-pane fade" id="memory" role="tabpanel">
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <h6>记忆记录</h6>
+                                <button id="refreshMemory" class="btn btn-sm btn-outline-primary">
+                                    <i class="fas fa-sync"></i> 刷新
+                                </button>
+                            </div>
+                            <div id="memoryRecords">
+                                <p class="text-muted">正在加载记忆记录...</p>
+                            </div>
+                        </div>
+
+                        <!-- ROS2状态 -->
+                        <div class="tab-pane fade" id="ros2" role="tabpanel">
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <h6>ROS2机械臂状态</h6>
+                                <button id="refreshROS2" class="btn btn-sm btn-outline-primary">
+                                    <i class="fas fa-sync"></i> 刷新
+                                </button>
+                            </div>
+                            <div id="ros2Status">
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <h6>当前位姿</h6>
+                                        <div id="currentPose">
+                                            <p>X: <span id="poseX">0.00</span></p>
+                                            <p>Y: <span id="poseY">0.00</span></p>
+                                            <p>Z: <span id="poseZ">0.00</span></p>
+                                            <p>Roll: <span id="poseRoll">0.00</span></p>
+                                            <p>Pitch: <span id="posePitch">0.00</span></p>
+                                            <p>Yaw: <span id="poseYaw">0.00</span></p>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <h6>机械臂状态</h6>
+                                        <p>状态: <span id="armStatus">未知</span></p>
+                                        <p>夹爪: <span id="gripperStatus">未知</span></p>
+                                        <p>Gazebo: <span id="gazeboStatus">未知</span></p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <!-- 主要JavaScript -->
+    <script>
+        class RobotAgentMVP {
+            constructor() {
+                this.websocket = null;
+                this.isConnected = false;
+                this.commandHistory = [];
+                this.logs = [];
+                this.maxLogs = 100;
+                
+                this.init();
+            }
+
+            init() {
+                this.setupEventListeners();
+                this.connectWebSocket();
+                this.startPeriodicUpdates();
+                this.addLog('系统初始化完成', 'info');
+            }
+
+            setupEventListeners() {
+                // 发送命令按钮
+                document.getElementById('sendCommand').addEventListener('click', () => {
+                    this.sendCommand();
+                });
+
+                // 回车键发送命令
+                document.getElementById('commandInput').addEventListener('keydown', (e) => {
+                    if (e.ctrlKey && e.key === 'Enter') {
+                        this.sendCommand();
+                    }
+                });
+
+                // 清空日志
+                document.getElementById('clearLogs').addEventListener('click', () => {
+                    this.clearLogs();
+                });
+
+                // 刷新按钮
+                document.getElementById('refreshMemory').addEventListener('click', () => {
+                    this.loadMemoryRecords();
+                });
+
+                document.getElementById('refreshROS2').addEventListener('click', () => {
+                    this.updateROS2Status();
+                });
+            }
+
+            connectWebSocket() {
+                const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                const wsUrl = `${protocol}//${window.location.host}/ws`;
+                
+                try {
+                    this.websocket = new WebSocket(wsUrl);
+                    
+                    this.websocket.onopen = () => {
+                        this.isConnected = true;
+                        this.updateConnectionStatus(true);
+                        this.addLog('WebSocket连接已建立', 'success');
+                    };
+
+                    this.websocket.onmessage = (event) => {
+                        const message = JSON.parse(event.data);
+                        this.handleWebSocketMessage(message);
+                    };
+
+                    this.websocket.onclose = () => {
+                        this.isConnected = false;
+                        this.updateConnectionStatus(false);
+                        this.addLog('WebSocket连接已断开', 'warning');
+                        
+                        // 尝试重连
+                        setTimeout(() => {
+                            this.addLog('尝试重新连接...', 'info');
+                            this.connectWebSocket();
+                        }, 5000);
+                    };
+
+                    this.websocket.onerror = (error) => {
+                        this.addLog(`WebSocket错误: ${error}`, 'error');
+                    };
+
+                } catch (error) {
+                    this.addLog(`连接失败: ${error}`, 'error');
+                }
+            }
+
+            updateConnectionStatus(connected) {
+                const statusElement = document.getElementById('connectionStatus');
+                if (connected) {
+                    statusElement.className = 'connection-status connected';
+                    statusElement.innerHTML = '<i class="fas fa-wifi"></i> 已连接';
+                } else {
+                    statusElement.className = 'connection-status disconnected';
+                    statusElement.innerHTML = '<i class="fas fa-wifi"></i> 已断开';
+                }
+            }
+
+            handleWebSocketMessage(message) {
+                switch (message.type) {
+                    case 'connection_established':
+                        this.addLog('服务器连接确认', 'success');
+                        break;
+                    case 'command_processed':
+                        this.addLog(`命令已处理: ${message.data.intent}`, 'success');
+                        break;
+                    case 'system_status':
+                        this.updateSystemStatus(message.data);
+                        break;
+                    case 'error':
+                        this.addLog(`错误: ${message.data.message}`, 'error');
+                        break;
+                    default:
+                        this.addLog(`收到消息: ${message.type}`, 'info');
+                }
+            }
+
+            async sendCommand() {
+                const input = document.getElementById('commandInput');
+                const userIdInput = document.getElementById('userIdInput');
+                const sendButton = document.getElementById('sendCommand');
+                
+                const command = input.value.trim();
+                const userId = userIdInput.value.trim() || 'user_001';
+                
+                if (!command) {
+                    this.addLog('请输入命令', 'warning');
+                    return;
+                }
+
+                // 禁用按钮并显示加载状态
+                sendButton.disabled = true;
+                sendButton.innerHTML = '<span class="loading"></span> 处理中...';
+
+                try {
+                    const response = await fetch('/api/process-command', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            user_id: userId,
+                            input_text: command,
+                            session_id: this.generateSessionId()
+                        })
+                    });
+
+                    const result = await response.json();
+
+                    if (result.success) {
+                        this.addCommandToHistory(command, result.data);
+                        this.addLog(`命令发送成功: ${result.data.parsed_intent}`, 'success');
+                        input.value = '';
+                    } else {
+                        this.addLog(`命令处理失败: ${result.message}`, 'error');
+                    }
+
+                } catch (error) {
+                    this.addLog(`发送命令失败: ${error}`, 'error');
+                } finally {
+                    // 恢复按钮状态
+                    sendButton.disabled = false;
+                    sendButton.innerHTML = '<i class="fas fa-paper-plane"></i> 发送命令';
+                }
+            }
+
+            addCommandToHistory(command, result) {
+                const historyContainer = document.getElementById('commandHistory');
+                
+                const historyItem = document.createElement('div');
+                historyItem.className = 'border-bottom pb-2 mb-2 fade-in';
+                historyItem.innerHTML = `
+                    <div class="d-flex justify-content-between">
+                        <small class="text-muted">${new Date().toLocaleTimeString()}</small>
+                        <span class="badge bg-primary">${result.status}</span>
+                    </div>
+                    <div class="mt-1">
+                        <strong>输入:</strong> ${command}
+                    </div>
+                    <div class="mt-1">
+                        <strong>解析:</strong> ${result.parsed_intent} → ${result.parsed_action}
+                    </div>
+                `;
+
+                if (historyContainer.firstChild && historyContainer.firstChild.tagName !== 'P') {
+                    historyContainer.insertBefore(historyItem, historyContainer.firstChild);
+                } else {
+                    historyContainer.innerHTML = '';
+                    historyContainer.appendChild(historyItem);
+                }
+
+                // 限制历史记录数量
+                const items = historyContainer.children;
+                if (items.length > 10) {
+                    historyContainer.removeChild(items[items.length - 1]);
+                }
+            }
+
+            addLog(message, level = 'info') {
+                const timestamp = new Date().toLocaleTimeString();
+                const logEntry = {
+                    timestamp,
+                    level,
+                    message
+                };
+
+                this.logs.unshift(logEntry);
+                if (this.logs.length > this.maxLogs) {
+                    this.logs.pop();
+                }
+
+                this.updateLogDisplay();
+            }
+
+            updateLogDisplay() {
+                const container = document.getElementById('logContainer');
+                container.innerHTML = this.logs.map(log => `
+                    <div class="log-entry fade-in">
+                        <span class="log-timestamp">[${log.timestamp}]</span>
+                        <span class="log-level-${log.level}">${log.message}</span>
+                    </div>
+                `).join('');
+
+                // 滚动到顶部
+                container.scrollTop = 0;
+            }
+
+            clearLogs() {
+                this.logs = [];
+                this.updateLogDisplay();
+                this.addLog('日志已清空', 'info');
+            }
+
+            async startPeriodicUpdates() {
+                // 立即更新一次
+                await this.updateSystemStatus();
+                await this.updatePerformanceMetrics();
+                await this.loadMemoryRecords();
+                await this.updateROS2Status();
+
+                // 设置定期更新
+                setInterval(() => {
+                    this.updateSystemStatus();
+                    this.updatePerformanceMetrics();
+                }, 5000);
+
+                setInterval(() => {
+                    this.loadMemoryRecords();
+                }, 30000);
+            }
+
+            async updateSystemStatus() {
+                try {
+                    const response = await fetch('/api/system-status');
+                    const result = await response.json();
+
+                    if (result.success) {
+                        const data = result.data;
+                        this.updateStatusIndicator('qwenStatus', data.qwen_service);
+                        this.updateStatusIndicator('redisStatus', data.redis_connection);
+                        this.updateStatusIndicator('memoryStatus', data.memory_agent);
+                        this.updateStatusIndicator('ros2Status', data.ros2_agent);
+                    }
+                } catch (error) {
+                    this.addLog(`更新系统状态失败: ${error}`, 'error');
+                }
+            }
+
+            updateStatusIndicator(elementId, status) {
+                const element = document.getElementById(elementId);
+                const indicator = element.previousElementSibling;
+                
+                element.textContent = status;
+                
+                indicator.className = 'status-indicator';
+                if (status === 'healthy') {
+                    indicator.classList.add('status-healthy');
+                } else if (status === 'unhealthy') {
+                    indicator.classList.add('status-unhealthy');
+                } else {
+                    indicator.classList.add('status-unknown');
+                }
+            }
+
+            async updatePerformanceMetrics() {
+                try {
+                    const response = await fetch('/api/performance-metrics');
+                    const metrics = await response.json();
+
+                    const metricsGrid = document.getElementById('metricsGrid');
+                    metricsGrid.innerHTML = `
+                        <div class="metric-card">
+                            <div class="metric-value">${metrics.cpu_usage.toFixed(1)}%</div>
+                            <div class="metric-label">CPU使用率</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-value">${metrics.memory_usage.toFixed(1)}%</div>
+                            <div class="metric-label">内存使用率</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-value">${metrics.total_requests}</div>
+                            <div class="metric-label">总请求数</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-value">${metrics.qwen_api_calls}</div>
+                            <div class="metric-label">Qwen调用次数</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-value">${metrics.ros2_commands_sent}</div>
+                            <div class="metric-label">ROS2命令数</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-value">${metrics.memory_records_created}</div>
+                            <div class="metric-label">记忆记录数</div>
+                        </div>
+                    `;
+                } catch (error) {
+                    this.addLog(`更新性能指标失败: ${error}`, 'error');
+                }
+            }
+
+            async loadMemoryRecords() {
+                try {
+                    const response = await fetch('/api/memory-records');
+                    const result = await response.json();
+
+                    const container = document.getElementById('memoryRecords');
+                    
+                    if (result.success && result.data.records.length > 0) {
+                        container.innerHTML = result.data.records.map(record => `
+                            <div class="border-bottom pb-2 mb-2">
+                                <div class="d-flex justify-content-between">
+                                    <strong>${record.filename}</strong>
+                                    <small class="text-muted">${new Date(record.created_time).toLocaleString()}</small>
+                                </div>
+                                <div class="mt-1">
+                                    <small>大小: ${(record.size / 1024).toFixed(1)} KB | 交互次数: ${record.interaction_count}</small>
+                                </div>
+                            </div>
+                        `).join('');
+                    } else {
+                        container.innerHTML = '<p class="text-muted">暂无记忆记录</p>';
+                    }
+                } catch (error) {
+                    this.addLog(`加载记忆记录失败: ${error}`, 'error');
+                }
+            }
+
+            async updateROS2Status() {
+                // 这里应该调用ROS2状态API，暂时使用模拟数据
+                try {
+                    // 模拟ROS2状态数据
+                    const mockData = {
+                        current_pose: { x: 0.0, y: 0.0, z: 0.0, roll: 0.0, pitch: 0.0, yaw: 0.0 },
+                        arm_status: 'idle',
+                        gripper_state: 'unknown',
+                        gazebo_running: false
+                    };
+
+                    document.getElementById('poseX').textContent = mockData.current_pose.x.toFixed(3);
+                    document.getElementById('poseY').textContent = mockData.current_pose.y.toFixed(3);
+                    document.getElementById('poseZ').textContent = mockData.current_pose.z.toFixed(3);
+                    document.getElementById('poseRoll').textContent = mockData.current_pose.roll.toFixed(3);
+                    document.getElementById('posePitch').textContent = mockData.current_pose.pitch.toFixed(3);
+                    document.getElementById('poseYaw').textContent = mockData.current_pose.yaw.toFixed(3);
+                    
+                    document.getElementById('armStatus').textContent = mockData.arm_status;
+                    document.getElementById('gripperStatus').textContent = mockData.gripper_state;
+                    document.getElementById('gazeboStatus').textContent = mockData.gazebo_running ? '运行中' : '未运行';
+                    
+                } catch (error) {
+                    this.addLog(`更新ROS2状态失败: ${error}`, 'error');
+                }
+            }
+
+            generateSessionId() {
+                return 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+            }
+        }
+
+        // 启动应用
+        document.addEventListener('DOMContentLoaded', () => {
+            new RobotAgentMVP();
+        });
+    </script>
+</body>
+</html>
