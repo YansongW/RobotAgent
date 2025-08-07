@@ -1,0 +1,49 @@
+# RobotAgent MVP Project Dependencies
+
+# Web Framework
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+
+# HTTP Client
+httpx==0.25.2
+requests==2.31.0
+aiohttp==3.9.1
+
+# WebSocket Client
+websockets==12.0
+aiohttp==3.9.1
+
+# Audio Processing
+pydub==0.25.1
+
+# File Processing
+python-multipart==0.0.6
+
+# Data Processing
+numpy==1.24.3
+pandas==2.1.4
+
+# Date and Time
+python-dateutil==2.8.2
+
+# JSON Processing
+orjson==3.9.10
+
+# Async Support
+asyncio==3.4.3
+aiofiles==23.2.1
+
+# Type Checking
+typing-extensions==4.8.0
+
+# Environment Variables
+python-dotenv==1.0.0
+
+# Logging
+loguru==0.7.2
+
+# Utilities
+pathlib==1.0.1
+
+# Data Models
+pydantic==2.5.0

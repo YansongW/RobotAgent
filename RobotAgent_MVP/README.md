@@ -1,298 +1,203 @@
-# RobotAgent MVP - 最小可行性验证项目
+# RobotAgent MVP
 
-## 项目概述
+基于豆包大模型的智能机器人对话系统，采用 ASR + 大模型 + TTS 三段式处理架构。
 
-RobotAgent MVP是基于主项目架构的最小可行性验证子项目，实现自然语言到ROS2机械臂控制的完整流程。项目采用前后端分离架构，使用Qwen系列模型进行自然语言处理，通过消息管道实现异步通信。
+## 功能特性
 
-## 核心功能
+- 🤖 **智能对话**: 基于豆包 Doubao-Seed-1.6 大模型的自然语言理解
+- 🎤 **语音识别**: 集成豆包 ASR 服务，支持实时语音转文字
+- 🔊 **语音合成**: 集成豆包 TTS 服务，支持文字转语音
+- 💾 **记忆功能**: 本地化对话历史保存和上下文复用
+- 🦾 **ROS2集成**: 支持机器人动作库管理和执行
+- 🌐 **Web界面**: 现代化的对话界面，支持文本和语音交互
 
-### 🎯 主要功能
-- **自然语言解析**: 使用Qwen模型将自然语言转换为标准JSON格式
-- **异步消息管道**: 基于Redis的消息队列实现Agent间通信
-- **记忆Agent**: 记录完整交互历史，生成Markdown格式的本地文档
-- **ROS2Agent**: 解析指令并控制睿尔曼机械臂（Gazebo仿真）
-- **完整日志系统**: 记录每次交互的输入输出、时间戳和延迟信息
-- **Web界面**: 提供用户友好的前端交互界面
+## 技术架构
 
-### 🏗️ 技术架构
+```
+ASR (语音识别) → 大模型 (对话生成) → TTS (语音合成)
+                      ↓
+              记忆服务 (上下文管理)
+                      ↓
+              ROS2服务 (动作执行)
+```
+
+## 项目结构
 
 ```
 RobotAgent_MVP/
-├── backend/                    # 后端服务
-│   ├── app.py                 # FastAPI主应用
-│   ├── models/                # 数据模型
-│   │   ├── __init__.py
-│   │   ├── message_models.py  # 消息数据模型
-│   │   └── response_models.py # 响应数据模型
-│   ├── services/              # 核心服务
-│   │   ├── __init__.py
-│   │   ├── qwen_service.py    # Qwen模型服务
-│   │   ├── message_queue.py   # 消息队列服务
-│   │   ├── memory_agent.py    # 记忆Agent
-│   │   └── ros2_agent.py      # ROS2Agent
-│   ├── utils/                 # 工具模块
-│   │   ├── __init__.py
-│   │   ├── logger.py          # 日志工具
-│   │   └── config.py          # 配置管理
-│   └── requirements.txt       # Python依赖
-├── frontend/                  # 前端界面
-│   ├── index.html            # 主页面
-│   ├── static/               # 静态资源
-│   │   ├── css/
-│   │   │   └── style.css     # 样式文件
-│   │   └── js/
-│   │       └── app.js        # 前端逻辑
-│   └── templates/            # 模板文件
-├── logs/                     # 日志文件目录
-├── memory_records/           # 记忆记录目录
-├── config/                   # 配置文件
-│   ├── config.yaml          # 主配置文件
-│   └── ros2_commands.json   # ROS2命令映射
-├── scripts/                  # 脚本文件
-│   ├── start_services.sh    # 启动脚本
-│   └── setup_environment.sh # 环境配置脚本
-├── tests/                    # 测试文件
-│   ├── test_qwen_service.py
-│   ├── test_message_queue.py
-│   └── test_integration.py
-├── docker-compose.yml        # Docker编排文件
-├── Dockerfile               # Docker镜像文件
-└── README.md               # 项目说明文档
+├── main.py                 # 主程序入口
+├── config.json            # 配置文件
+├── requirements.txt        # 依赖列表
+├── services/              # 服务模块
+│   ├── doubao_service.py  # 豆包大模型服务
+│   ├── asr_service.py     # 语音识别服务
+│   ├── tts_service.py     # 语音合成服务
+│   ├── memory_service.py  # 记忆管理服务
+│   └── ros2_service.py    # ROS2动作服务
+├── prompts/               # 提示词模板
+│   ├── system_prompt.json
+│   ├── conversation_prompt.json
+│   └── task_execution_prompt.json
+├── ros2_actions/          # ROS2动作库
+│   ├── basic_movements.py
+│   └── manipulation_actions.py
+├── static/                # 前端文件
+│   ├── index.html
+│   ├── style.css
+│   └── app.js
+├── memory/                # 记忆文件存储
+├── logs/                  # 日志文件
+└── README.md
 ```
 
-## 系统流程
+## 快速开始
 
-### 🔄 数据流程图
+### 1. 安装依赖
 
-```
-用户输入 → Web前端 → FastAPI后端 → Qwen模型解析 → JSON格式化
-                                                        ↓
-记忆Agent ← 消息队列(Redis) ← JSON消息 ← 消息分发器
-    ↓                              ↓
-本地MD文档                    ROS2Agent
-                                ↓
-                        睿尔曼机械臂控制(Gazebo)
+```bash
+pip install -r requirements.txt
 ```
 
-### 📋 处理步骤
+### 2. 配置API密钥
 
-1. **用户输入**: 通过Web界面输入自然语言指令
-2. **模型解析**: Qwen模型将自然语言转换为结构化JSON
-3. **消息分发**: 通过Redis消息队列异步分发给各Agent
-4. **记忆存储**: Memory Agent记录完整交互历史
-5. **机械臂控制**: ROS2 Agent解析指令并控制机械臂
-6. **日志记录**: 完整记录处理过程和性能指标
+编辑 `config.json` 文件，填入您的豆包API密钥：
 
-## JSON消息格式规范
-
-### 输入消息格式
 ```json
 {
-  "user_id": "user_123",
-  "timestamp": "2024-01-15T10:30:00Z",
-  "session_id": "session_456",
-  "input_text": "请让机械臂移动到位置(0.3, 0.2, 0.5)",
-  "language": "zh-CN"
-}
-```
-
-### 解析后的标准格式
-```json
-{
-  "message_id": "msg_789",
-  "timestamp": "2024-01-15T10:30:01Z",
-  "user_id": "user_123",
-  "session_id": "session_456",
-  "intent": "robot_control",
-  "action": "move_to_position",
-  "parameters": {
-    "target_position": {
-      "x": 0.3,
-      "y": 0.2,
-      "z": 0.5
-    },
-    "coordinate_frame": "base_link",
-    "speed": "normal",
-    "precision": "high"
-  },
-  "priority": "normal",
-  "requires_confirmation": false,
-  "estimated_duration": 5.0
-}
-```
-
-### ROS2命令映射
-```json
-{
-  "move_to_position": {
-    "ros2_command": "ros2 action send_goal",
-    "action_type": "/rm_driver/move_to_pose",
-    "parameters_mapping": {
-      "target_position.x": "pose.position.x",
-      "target_position.y": "pose.position.y", 
-      "target_position.z": "pose.position.z"
-    }
+  "doubao_api": {
+    "api_key": "您的API密钥",
+    "base_url": "https://ark.cn-beijing.volces.com/api/v3"
   }
 }
 ```
 
-## 环境要求
+### 3. 启动服务
 
-### 系统要求
-- **操作系统**: Ubuntu 20.04/22.04 或 Windows 10/11
-- **Python**: 3.8+
-- **ROS2**: Humble Hawksbill
-- **Redis**: 6.0+
-- **内存**: 最少8GB RAM
-- **存储**: 最少10GB可用空间
-
-### 依赖服务
-- **Qwen API**: 通义千问模型API访问
-- **Redis**: 消息队列服务
-- **Gazebo**: 机械臂仿真环境
-- **睿尔曼ROS2包**: rm_robot功能包
-
-## 快速开始
-
-### 1. 环境配置
 ```bash
-# 克隆项目
-cd RobotAgent_MVP
-
-# 安装Python依赖
-pip install -r backend/requirements.txt
-
-# 配置环境变量
-cp config/config.yaml.template config/config.yaml
-# 编辑config.yaml，填入Qwen API密钥等配置
-
-# 启动Redis服务
-sudo systemctl start redis-server
-
-# 配置ROS2环境
-source /opt/ros/humble/setup.bash
+python main.py
 ```
 
-### 2. 启动服务
-```bash
-# 启动后端服务
-cd backend
-python app.py
+### 4. 访问界面
 
-# 启动Gazebo仿真（新终端）
-source ~/ros2_ws/install/setup.bash
-ros2 launch rm_gazebo gazebo_65_demo.launch.py
-
-# 启动MoveIt2（新终端）
-ros2 launch rm_65_config gazebo_moveit_demo.launch.py
-```
-
-### 3. 访问界面
-- **Web界面**: http://localhost:8000
-- **API文档**: http://localhost:8000/docs
-- **日志查看**: logs/目录下的日志文件
-- **记忆记录**: memory_records/目录下的Markdown文件
+打开浏览器访问: http://localhost:8000
 
 ## API接口
 
-### 主要端点
-- `POST /api/v1/process_command` - 处理自然语言指令
-- `GET /api/v1/status` - 获取系统状态
-- `GET /api/v1/logs` - 获取日志信息
-- `GET /api/v1/memory_records` - 获取记忆记录
-- `WebSocket /ws` - 实时状态推送
-
-### 使用示例
-```bash
-# 发送控制指令
-curl -X POST "http://localhost:8000/api/v1/process_command" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "user_id": "test_user",
-    "input_text": "让机械臂移动到桌子上方",
-    "session_id": "test_session"
-  }'
+### 文本对话
+```
+POST /chat/text
+{
+  "message": "用户消息",
+  "conversation_id": "对话ID"
+}
 ```
 
-## 日志系统
-
-### 日志级别
-- **DEBUG**: 详细的调试信息
-- **INFO**: 一般信息记录
-- **WARNING**: 警告信息
-- **ERROR**: 错误信息
-- **CRITICAL**: 严重错误
-
-### 日志文件
-- `logs/app.log` - 应用主日志
-- `logs/qwen_service.log` - Qwen服务日志
-- `logs/ros2_agent.log` - ROS2 Agent日志
-- `logs/memory_agent.log` - Memory Agent日志
-- `logs/performance.log` - 性能指标日志
-
-## 测试
-
-### 单元测试
-```bash
-# 运行所有测试
-python -m pytest tests/ -v
-
-# 运行特定测试
-python -m pytest tests/test_qwen_service.py -v
+### 语音对话
+```
+POST /chat/voice
+Content-Type: multipart/form-data
+- audio: 音频文件
+- conversation_id: 对话ID
 ```
 
-### 集成测试
-```bash
-# 端到端测试
-python tests/test_integration.py
+### 获取对话历史
+```
+GET /chat/history/{conversation_id}
 ```
 
-## 性能指标
+### 获取ROS2动作库
+```
+GET /ros2/actions
+```
 
-### 关键指标
-- **响应时间**: Qwen模型调用延迟
-- **处理时间**: 完整流程处理时间
-- **成功率**: 指令解析和执行成功率
-- **并发能力**: 同时处理的请求数量
+### 健康检查
+```
+GET /health
+```
 
-### 监控方式
-- 实时日志监控
-- 性能指标统计
-- Web界面状态显示
-- 告警机制
+## 配置说明
 
-## 故障排除
+### 豆包模型配置
 
-### 常见问题
-1. **Qwen API调用失败**: 检查API密钥和网络连接
-2. **Redis连接失败**: 确认Redis服务运行状态
-3. **ROS2通信问题**: 检查ROS2环境配置
-4. **Gazebo启动失败**: 确认显卡驱动和依赖包
+- **Chat模型**: doubao-seed-1.6 (对话生成)
+- **Embedding模型**: doubao-embedding-large (文本向量化)
+- **Vision模型**: doubao-embedding-vision (图文向量化)
 
-### 调试方法
-- 查看详细日志文件
-- 使用API测试工具
-- 检查系统资源使用
-- 验证配置文件正确性
+### ASR配置
 
-## 扩展计划
+- **引擎**: doubao-streaming (流式识别)
+- **语言**: zh-CN (中文)
+- **采样率**: 16000Hz
 
-### 短期目标
-- [ ] 支持更多机械臂动作类型
-- [ ] 增加语音输入功能
-- [ ] 优化响应速度
-- [ ] 添加安全检查机制
+### TTS配置
 
-### 长期目标
-- [ ] 集成视觉感知
-- [ ] 支持多机械臂协作
-- [ ] 添加学习能力
-- [ ] 云端部署支持
+- **语音**: BV700_streaming (流式合成)
+- **语言**: zh-CN (中文)
+- **音频格式**: mp3
 
-## 贡献指南
+## 记忆功能
 
-欢迎提交Issue和Pull Request来改进项目。
+系统支持多层次的记忆管理：
+
+1. **对话历史**: 保存完整的用户-机器人对话记录
+2. **上下文缓存**: 利用豆包的上下文缓存API提高响应效率
+3. **Prompt复用**: 支持从记忆文件导入上下文到新对话
+
+## ROS2集成
+
+### 动作库管理
+
+- 动态加载 `ros2_actions/` 目录下的Python文件
+- 支持基础移动和机械臂操作动作
+- 实时更新动作库（手动添加文件即可）
+
+### 动作格式
+
+```python
+{
+    "action_name": {
+        "name": "动作名称",
+        "description": "动作描述",
+        "category": "动作类别",
+        "parameters": {
+            "param1": "参数描述"
+        },
+        "example": "使用示例"
+    }
+}
+```
+
+## 开发指南
+
+### 添加新的ROS2动作
+
+1. 在 `ros2_actions/` 目录下创建Python文件
+2. 按照标准格式定义动作字典
+3. 系统会自动加载新动作
+
+### 自定义Prompt
+
+1. 在 `prompts/` 目录下创建JSON文件
+2. 按照模板格式定义提示词
+3. 在服务中引用新的提示词
+
+### 扩展服务
+
+1. 在 `services/` 目录下创建新的服务文件
+2. 在 `main.py` 中注册新服务
+3. 添加相应的API路由
+
+## 注意事项
+
+- 确保API密钥有效且有足够的配额
+- 语音功能需要浏览器支持麦克风访问
+- 记忆文件会随着使用增长，建议定期清理
+- ROS2功能目前为模拟实现，实际部署需要ROS2环境
 
 ## 许可证
 
-本项目采用MIT许可证。
+MIT License
+
+## 支持
+
+如有问题，请查看日志文件或联系开发团队。

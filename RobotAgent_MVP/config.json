@@ -1,0 +1,53 @@
+{
+  "doubao_api": {
+    "api_key": "zsVOJvFK9LGmCXLUSt1423tWy9NC8mh1",
+    "base_url": "https://ark.cn-beijing.volces.com/api/v3",
+    "models": {
+      "chat": "ep-20241230161946-8xqzr",
+      "embedding_text": "doubao-embedding-large",
+      "embedding_vision": "doubao-embedding-vision"
+    },
+    "endpoints": {
+      "chat": "/chat/completions",
+      "embeddings": "/embeddings",
+      "embeddings_multimodal": "/embeddings",
+      "tokenization": "/tokenization",
+      "context_create": "/context/create",
+      "context_chat": "/context/chat/completions"
+    }
+  },
+  "asr_config": {
+    "app_id": "5649353480",
+    "access_token": "zsVOJvFK9LGmCXLUSt1423tWy9NC8mh1",
+    "secret_key": "TnGu46ZEnyBOlbioQOUjoLEeoT1Dzaq2",
+    "base_url": "wss://openspeech.bytedance.com/api/v3/sasr/bigmodel",
+    "model": "bigasr-streaming",
+    "resource_id": "volc.bigasr.sauc.duration",
+    "language": "zh-CN",
+    "format": "pcm",
+    "sample_rate": 16000,
+    "channel": 1
+  },
+  "tts_config": {
+    "app_id": "5649353480",
+    "access_token": "zsVOJvFK9LGmCXLUSt1423tWy9NC8mh1",
+    "secret_key": "TnGu46ZEnyBOlbioQOUjoLEeoT1Dzaq2",
+    "base_url": "wss://openspeech.bytedance.com/api/v3/tts/bidirection",
+    "resource_id": "volc.service_type.10029",
+    "voice_type": "zh_female_linjianvhai_moon_bigtts",
+    "model": "seed-tts-1.1",
+    "format": "pcm",
+    "sample_rate": 24000,
+    "channel": 1
+  },
+  "server_config": {
+    "host": "0.0.0.0",
+    "port": 8000,
+    "debug": true
+  },
+  "memory_config": {
+    "max_history": 100,
+    "memory_file": "memory/conversation_history.json",
+    "ros2_actions_file": "ros2_actions/actions_library.json"
+  }
+}
