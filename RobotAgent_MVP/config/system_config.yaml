@@ -1,0 +1,14 @@
+# 系统配置文件
+# 系统级别的配置参数
+
+system:
+  log_level: "INFO"
+  max_concurrent_tasks: 10
+
+communication:
+  message_timeout: 30
+  retry_attempts: 3
+
+output:
+  tts_enabled: true
+  action_file_format: "json"

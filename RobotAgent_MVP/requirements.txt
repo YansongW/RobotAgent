@@ -1,0 +1,22 @@
+# RobotAgent MVP 依赖包
+# 基于CAMEL框架的三智能体系统
+
+# CAMEL框架
+camel-ai>=0.1.0
+
+# 基础依赖
+pydantic>=2.0.0
+pyyaml>=6.0
+asyncio-mqtt>=0.11.0
+
+# 语音处理
+pyttsx3>=2.90
+speechrecognition>=3.10.0
+
+# 日志和配置
+loguru>=0.7.0
+python-dotenv>=1.0.0
+
+# 测试
+pytest>=7.0.0
+pytest-asyncio>=0.21.0
