@@ -142,3 +142,6 @@ data/
 *.h5
 *.pt
 *.pth
+
+# 外部项目代码 - 用于学习分析，不提交到仓库
+external_projects/
