@@ -510,22 +510,22 @@ class BaseRobotAgent(ABC):
     
     @property
     def state(self) -> AgentState:
-        """获取当前状态"""
+        # 获取当前状态
         return self._state
     
     @property
     def is_running(self) -> bool:
-        """检查智能体是否正在运行"""
+        # 检查智能体是否正在运行
         return self._state not in [AgentState.SHUTDOWN, AgentState.ERROR]
     
     @property
     def capabilities(self) -> List[AgentCapability]:
-        """获取智能体能力列表"""
+        # 获取智能体能力列表
         return self._capabilities.copy()
     
     @property
     def available_tools(self) -> List[str]:
-        """获取可用工具列表"""
+        # 获取可用工具列表
         return [name for name, tool in self._tools.items() if tool.enabled]
     
     # === 生命周期管理方法 ===
@@ -900,11 +900,9 @@ class BaseRobotAgent(ABC):
             )
     
     async def _handle_tool_result_message(self, message: AgentMessage):
-        """
         # 处理工具执行结果消息
         # 
         # 记录工具执行结果，用于后续处理。
-        """
         result_data = message.content
         tool_name = result_data.get('tool_name')
         success = result_data.get('success', False)
@@ -926,11 +924,9 @@ class BaseRobotAgent(ABC):
             self._performance_metrics['tool_stats']['failed_calls'] += 1
     
     async def _handle_status_message(self, message: AgentMessage):
-        """
         # 处理状态消息
         # 
         # 更新其他智能体的状态信息。
-        """
         status_data = message.content
         sender_id = message.sender
         
@@ -946,11 +942,9 @@ class BaseRobotAgent(ABC):
         self.logger.debug(f"更新智能体 {sender_id} 状态: {status_data}")
     
     async def _handle_error_message(self, message: AgentMessage):
-        """
         # 处理错误消息
         # 
         # 记录错误信息，必要时采取恢复措施。
-        """
         error_info = message.content
         sender_id = message.sender
         
@@ -965,11 +959,9 @@ class BaseRobotAgent(ABC):
         })
     
     async def _handle_heartbeat_message(self, message: AgentMessage):
-        """
         # 处理心跳消息
         # 
         # 响应心跳检测，维护连接状态。
-        """
         # 发送心跳响应
         await self.send_message(
             recipient=message.sender,
@@ -978,11 +970,9 @@ class BaseRobotAgent(ABC):
         )
     
     async def _handle_collaboration_message(self, message: AgentMessage):
-        """
         # 处理协作消息
         # 
         # 处理智能体间的协作请求。
-        """
         collaboration_data = message.content
         collaboration_type = collaboration_data.get('type')
         
@@ -998,11 +988,8 @@ class BaseRobotAgent(ABC):
     # === 任务处理方法 ===
     
     async def _task_processing_loop(self):
-        """
         # 任务处理循环
-        # 
         # 持续处理任务队列中的任务。
-        """
         while self.is_running:
             try:
                 # 等待任务，设置超时避免无限阻塞
@@ -1020,11 +1007,8 @@ class BaseRobotAgent(ABC):
                 self.logger.error(f"任务处理循环错误: {e}")
     
     async def _execute_task(self, task: TaskDefinition):
-        """
         # 执行具体任务
-        # 
         # 这是一个抽象方法，由子类实现具体的任务执行逻辑。
-        """
         try:
             await self._set_state(AgentState.EXECUTING)
             
@@ -1067,9 +1051,7 @@ class BaseRobotAgent(ABC):
             await self._set_state(AgentState.IDLE)
     
     def _update_task_stats(self, success: bool, execution_time: float):
-        """
         # 更新任务统计信息
-        """
         stats = self._performance_metrics['task_stats']
         stats['total_tasks'] += 1
         
@@ -1091,11 +1073,8 @@ class BaseRobotAgent(ABC):
                      return_schema: Dict[str, Any] = None,
                      permissions: List[str] = None,
                      category: str = "general"):
-        """
         # 注册工具函数
-        # 
         # 基于Eigent项目的MCP工具集成机制。
-        """
         tool = ToolDefinition(
             name=name,
             description=description,
@@ -1110,19 +1089,14 @@ class BaseRobotAgent(ABC):
         self.logger.info(f"注册工具: {name}")
     
     def unregister_tool(self, name: str):
-        """
         # 注销工具函数
-        """
         if name in self._tools:
             del self._tools[name]
             self.logger.info(f"注销工具: {name}")
     
     async def call_tool(self, tool_name: str, parameters: Dict[str, Any]) -> Any:
-        """
         # 调用工具函数
-        # 
         # 执行指定的工具函数并返回结果。
-        """
         if tool_name not in self._tools:
             raise ValueError(f"工具 {tool_name} 不存在")
         
@@ -1161,9 +1135,7 @@ class BaseRobotAgent(ABC):
             raise
     
     def get_tool_info(self, tool_name: str) -> Optional[Dict[str, Any]]:
-        """
         # 获取工具信息
-        """
         if tool_name not in self._tools:
             return None
         
@@ -1181,15 +1153,11 @@ class BaseRobotAgent(ABC):
     # === 默认工具实现 ===
     
     def _tool_get_current_time(self) -> str:
-        """
         # 获取当前时间的工具函数
-        """
         return datetime.now().isoformat()
     
     def _tool_log_message(self, message: str, level: str = "info"):
-        """
         # 记录日志的工具函数
-        """
         if level == "info":
             self.logger.info(message)
         elif level == "warning":
@@ -1204,11 +1172,8 @@ class BaseRobotAgent(ABC):
                                   partner_id: str, 
                                   collaboration_type: str,
                                   data: Dict[str, Any]) -> str:
-        """
         # 请求与其他智能体协作
-        # 
         # 基于OWL项目的智能体协作机制。
-        """
         collaboration_request = {
             'type': 'request',
             'collaboration_type': collaboration_type,
@@ -1237,9 +1202,7 @@ class BaseRobotAgent(ABC):
         return message_id
     
     async def _handle_collaboration_request(self, message: AgentMessage):
-        """
         # 处理协作请求
-        """
         collaboration_data = message.content
         collaboration_type = collaboration_data.get('collaboration_type')
         requester = collaboration_data.get('requester')

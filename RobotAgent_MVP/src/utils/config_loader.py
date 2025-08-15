@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-配置加载工具
-用于安全地加载API配置和其他系统配置
-"""
+# 配置加载工具
+# 用于安全地加载API配置和其他系统配置
 
 import os
 import yaml
@@ -11,15 +9,13 @@ from pathlib import Path
 from typing import Dict, Any, Optional
 
 class ConfigLoader:
-    """配置加载器"""
+    # 配置加载器
     
     def __init__(self, config_dir: Optional[Path] = None):
-        """
-        初始化配置加载器
-        
-        Args:
-            config_dir: 配置文件目录，默认为项目根目录下的config文件夹
-        """
+        # 初始化配置加载器
+        # 
+        # Args:
+        #     config_dir: 配置文件目录，默认为项目根目录下的config文件夹
         if config_dir is None:
             # 获取项目根目录
             current_file = Path(__file__)
@@ -29,12 +25,10 @@ class ConfigLoader:
             self.config_dir = config_dir
     
     def load_api_config(self) -> Dict[str, Any]:
-        """
-        加载API配置
-        
-        Returns:
-            API配置字典
-        """
+        # 加载API配置
+        # 
+        # Returns:
+        #     API配置字典
         config_file = self.config_dir / "api_config.yaml"
         
         if not config_file.exists():
@@ -48,12 +42,10 @@ class ConfigLoader:
             raise RuntimeError(f"加载API配置失败: {e}")
     
     def get_volcengine_config(self) -> Dict[str, Any]:
-        """
-        获取火山方舟API配置
-        
-        Returns:
-            火山方舟配置字典
-        """
+        # 获取火山方舟API配置
+        # 
+        # Returns:
+        #     火山方舟配置字典
         api_config = self.load_api_config()
         volcengine_config = api_config.get('volcengine', {})
         
@@ -69,15 +61,13 @@ class ConfigLoader:
         return volcengine_config
     
     def get_api_key(self, service: str) -> str:
-        """
-        获取指定服务的API密钥
-        
-        Args:
-            service: 服务名称 (如 'volcengine', 'openai')
-            
-        Returns:
-            API密钥
-        """
+        # 获取指定服务的API密钥
+        # 
+        # Args:
+        #     service: 服务名称 (如 'volcengine', 'openai')
+        #     
+        # Returns:
+        #     API密钥
         api_config = self.load_api_config()
         service_config = api_config.get(service, {})
         
@@ -91,12 +81,10 @@ class ConfigLoader:
         return api_key
     
     def load_system_config(self) -> Dict[str, Any]:
-        """
-        加载系统配置
-        
-        Returns:
-            系统配置字典
-        """
+        # 加载系统配置
+        # 
+        # Returns:
+        #     系统配置字典
         config_file = self.config_dir / "system_config.yaml"
         
         if not config_file.exists():

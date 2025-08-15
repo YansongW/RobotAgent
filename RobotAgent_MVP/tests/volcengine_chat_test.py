@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
- 机器人对话验证工具
-使用OpenAI SDK调用火山方舟的Chat API，实现命令行对话功能
-"""
+# 机器人对话验证工具
+# 使用OpenAI SDK调用火山方舟的Chat API，实现命令行对话功能
 
 import os
 import json
@@ -20,14 +18,12 @@ from src.utils.config_loader import config_loader
 
 class VolcengineChatClient:
     def __init__(self, api_key: str = None, model_id: str = None, config: dict = None):
-        """
-        初始化火山方舟Chat客户端
-        
-        Args:
-            api_key: 火山方舟API密钥，如果为None则从配置文件加载
-            model_id: 模型ID，如果为None则从配置文件加载
-            config: 配置字典，如果为None则从配置文件加载
-        """
+        # 初始化火山方舟Chat客户端
+        # 
+        # Args:
+        #     api_key: 火山方舟API密钥，如果为None则从配置文件加载
+        #     model_id: 模型ID，如果为None则从配置文件加载
+        #     config: 配置字典，如果为None则从配置文件加载
         # 加载配置
         if config is None:
             try:
@@ -57,12 +53,10 @@ class VolcengineChatClient:
         self.system_prompt = self._load_system_prompt()
         
     def _load_system_prompt(self) -> str:
-        """
-        从配置文件加载系统提示词
-        
-        Returns:
-            格式化后的系统提示词字符串
-        """
+        # 从配置文件加载系统提示词
+        # 
+        # Returns:
+        #     格式化后的系统提示词字符串
         try:
             config_path = project_root / "config" / "chat_agent_prompt_template.json"
             with open(config_path, 'r', encoding='utf-8') as f:
@@ -96,15 +90,13 @@ class VolcengineChatClient:
             return "你是一个智能助手，请用自然、友好的方式与用户对话。"
     
     def chat(self, user_message: str) -> str:
-        """
-        发送消息并获取回复
-        
-        Args:
-            user_message: 用户输入的消息
-            
-        Returns:
-            AI助手的回复
-        """
+        # 发送消息并获取回复
+        # 
+        # Args:
+        #     user_message: 用户输入的消息
+        #     
+        # Returns:
+        #     AI助手的回复
         try:
             # 构建消息列表
             messages = [{"role": "system", "content": self.system_prompt}]
@@ -140,12 +132,12 @@ class VolcengineChatClient:
             return f"抱歉，发生了错误：{str(e)}"
     
     def clear_history(self):
-        """清空对话历史"""
+        # 清空对话历史
         self.conversation_history = []
         print("对话历史已清空。")
 
 def main():
-    """主函数：实现命令行对话界面"""
+    # 主函数：实现命令行对话界面
     
     print("=" * 60)
     print("🤖 火山方舟Chat API测试工具")
