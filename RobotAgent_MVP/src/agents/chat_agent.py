@@ -36,9 +36,14 @@ from enum import Enum
 
 # 导入项目基础组件
 from .base_agent import (
-    BaseRobotAgent, AgentState, MessageType, TaskStatus,
-    AgentMessage, TaskDefinition, AgentCapability, ToolDefinition
+    BaseRobotAgent, AgentState, TaskStatus,
+    TaskDefinition, AgentCapability, ToolDefinition
 )
+from ..communication.protocols import (
+    MessageType, AgentMessage, MessagePriority, CollaborationMode,
+    TaskMessage, ResponseMessage, StatusMessage
+)
+from ..communication.message_bus import get_message_bus
 
 # 导入CAMEL框架组件
 try:

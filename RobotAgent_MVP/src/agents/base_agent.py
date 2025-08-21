@@ -20,6 +20,14 @@ from copy import deepcopy
 import uuid
 import traceback
 
+# 导入通信协议和消息总线
+from ..communication.protocols import (
+    AgentMessage, MessageType, MessagePriority, TaskMessage, ResponseMessage,
+    StatusMessage, CollaborationRequest, CollaborationResponse, MemoryMessage,
+    ToolMessage, MessageProtocol, MessageValidator, AgentRole
+)
+from ..communication.message_bus import MessageBus, get_message_bus
+
 # CAMEL框架核心组件导入
 try:
     from camel.agents import ChatAgent
@@ -48,20 +56,7 @@ class AgentState(Enum):
     SHUTDOWN = "shutdown"          # 关闭状态
 
 
-class MessageType(Enum):
-    # 消息类型枚举
-    # 定义智能体间通信的消息类型，支持多种交互模式
-    # 基于OWL项目的消息传递机制扩展
-    TEXT = "text"                  # 文本消息
-    TASK = "task"                  # 任务分配
-    INSTRUCTION = "instruction"    # 指令消息（来自OWL的用户智能体模式）
-    RESPONSE = "response"          # 响应消息
-    TOOL_CALL = "tool_call"        # 工具调用请求
-    TOOL_RESULT = "tool_result"    # 工具执行结果
-    STATUS = "status"              # 状态更新
-    ERROR = "error"                # 错误报告
-    HEARTBEAT = "heartbeat"        # 心跳检测
-    COLLABORATION = "collaboration" # 协作请求
+# MessageType 现在从 protocols 模块导入
 
 
 class TaskStatus(Enum):
@@ -75,23 +70,7 @@ class TaskStatus(Enum):
     DELEGATED = "delegated"        # 已委派给其他智能体
 
 
-@dataclass
-class AgentMessage:
-
-    # 智能体消息数据结构
-    # 标准化的消息格式，确保智能体间通信的一致性和可靠性
-    # 融合了Eigent和OWL项目的消息处理机制
-
-    sender: str                    # 发送者ID
-    recipient: str                 # 接收者ID
-    content: Any                   # 消息内容
-    message_type: MessageType      # 消息类型
-    timestamp: float = field(default_factory=time.time)  # 时间戳
-    message_id: str = field(default_factory=lambda: str(uuid.uuid4()))  # 消息ID
-    metadata: Dict[str, Any] = field(default_factory=dict)  # 元数据
-    tool_calls: List[Dict] = field(default_factory=list)   # 工具调用记录
-    parent_message_id: Optional[str] = None  # 父消息ID（用于消息链追踪）
-    conversation_id: Optional[str] = None     # 对话ID
+# AgentMessage 现在从 protocols 模块导入
 
 
 @dataclass
@@ -147,11 +126,9 @@ class ToolDefinition:
     category: str = "general"
 
 
-class CollaborationMode(Enum):
-
-    # 协作模式枚举
-    # 基于OWL项目的智能体协作机制
-
+# CollaborationMode 现在从 protocols 模块导入
+class LegacyCollaborationMode(Enum):
+    # 保留原有的协作模式定义以兼容现有代码
     ROLE_PLAYING = "role_playing"  # 角色扮演模式（用户-助手）
     PEER_TO_PEER = "peer_to_peer"  # 对等协作模式
     HIERARCHICAL = "hierarchical"  # 层次化协作模式
@@ -204,7 +181,7 @@ class BaseRobotAgent(ABC):
                  agent_type: str,
                  config: Dict[str, Any] = None,
                  model_config: Dict[str, Any] = None,
-                 collaboration_mode: CollaborationMode = CollaborationMode.PEER_TO_PEER):
+                 collaboration_mode: LegacyCollaborationMode = LegacyCollaborationMode.PEER_TO_PEER):
 
         # 初始化智能体基类
         # 
@@ -233,6 +210,7 @@ class BaseRobotAgent(ABC):
         self._state_lock = asyncio.Lock()
         
         # === 消息系统初始化 ===
+        self.message_bus = get_message_bus()  # 获取全局消息总线实例
         self._message_queue: asyncio.Queue = asyncio.Queue()
         self._message_task: Optional[asyncio.Task] = None
         self._message_handlers: Dict[MessageType, Callable] = {}
@@ -533,10 +511,11 @@ class BaseRobotAgent(ABC):
     async def start(self):
         # 启动智能体
         # 启动智能体的主要服务：
-        # 1. 消息处理循环
-        # 2. 任务处理循环
-        # 3. 心跳检测
-        # 4. 状态监控
+        # 1. 注册到消息总线
+        # 2. 消息处理循环
+        # 3. 任务处理循环
+        # 4. 心跳检测
+        # 5. 状态监控
 
         if self._state == AgentState.SHUTDOWN:
             raise RuntimeError("无法启动已关闭的智能体")
@@ -544,6 +523,9 @@ class BaseRobotAgent(ABC):
         self.logger.info(f"启动智能体 {self.agent_id}")
         
         try:
+            # 注册到消息总线
+            await self.message_bus.register_agent(self.agent_id, self)
+            
             # 启动消息处理任务
             self._message_task = asyncio.create_task(self._message_processing_loop())
             
@@ -683,8 +665,8 @@ class BaseRobotAgent(ABC):
         
         self.logger.debug(f"发送消息给 {recipient}: {message_type.value}")
         
-        # 在实际实现中，这里应该通过消息总线发送消息
-        # 目前返回消息ID用于跟踪
+        # 通过消息总线发送消息
+        await self.message_bus.send_message(message)
         return message.message_id
     
     async def receive_message(self, message: AgentMessage):
@@ -710,11 +692,10 @@ class BaseRobotAgent(ABC):
         # 持续处理消息队列中的消息，直到智能体停止。
         while self.is_running:
             try:
-                # 等待消息，设置超时避免无限阻塞
-                message = await asyncio.wait_for(
-                    self._message_queue.get(), 
-                    timeout=1.0
-                )
+                # 从消息总线接收消息
+                message = await self.message_bus.receive_message(self.agent_id, timeout=1.0)
+                if message is None:
+                    continue
                 
                 await self._process_message(message)
                 
