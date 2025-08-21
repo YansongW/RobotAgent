@@ -1,6 +1,12 @@
-# 智能体消息总线
-# 处理智能体间的通信
+# -*- coding: utf-8 -*-
 
+# 智能体消息总线 (Message Bus)
+# 负责智能体间消息传递、路由和协调的核心通信组件
+# 作者: RobotAgent开发团队
+# 版本: 0.0.1 (Initial Release)
+# 更新时间: 2025-08-21
+
+# 导入标准库
 import asyncio
 import uuid
 import json
@@ -12,6 +18,7 @@ from dataclasses import dataclass, asdict
 from collections import defaultdict, deque
 import weakref
 
+# 导入项目基础组件
 from .protocols import MessageType, MessagePriority, AgentMessage, CollaborationRequest, CollaborationResponse
 
 

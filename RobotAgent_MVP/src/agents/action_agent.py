@@ -1,6 +1,12 @@
-# Action Agent - 动作智能体
-# 负责动作规划和执行逻辑
+# -*- coding: utf-8 -*-
 
+# 动作智能体 (Action Agent)
+# 专注于动作规划、任务分解和执行逻辑的智能体实现
+# 作者: RobotAgent开发团队
+# 版本: 0.0.1 (Initial Release)
+# 更新时间: 2025-08-21
+
+# 导入标准库
 import asyncio
 import uuid
 import json
@@ -9,12 +15,24 @@ from typing import Dict, List, Any, Optional, Union
 from enum import Enum
 from dataclasses import dataclass, asdict
 
+# 导入项目基础组件
 from .base_agent import BaseRobotAgent, TaskStatus
 from ..communication.protocols import (
     MessageType, AgentMessage, MessagePriority, CollaborationMode,
     TaskMessage, ResponseMessage, StatusMessage, MemoryMessage
 )
 from ..communication.message_bus import get_message_bus
+
+# 导入CAMEL框架组件
+try:
+    from camel.agents import ChatAgent
+    from camel.messages import BaseMessage
+    from camel.models import ModelFactory
+    CAMEL_AVAILABLE = True
+except ImportError:
+    CAMEL_AVAILABLE = False
+    import logging
+    logging.warning("CAMEL框架未安装，使用模拟实现")
 
 
 class TaskType(Enum):

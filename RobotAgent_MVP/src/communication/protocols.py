@@ -1,6 +1,12 @@
-# 通信协议定义
-# 定义智能体间的消息格式和协议
+# -*- coding: utf-8 -*-
 
+# 通信协议定义 (Communication Protocols)
+# 定义智能体间的消息格式、协议和通信规范
+# 作者: RobotAgent开发团队
+# 版本: 0.0.1 (Initial Release)
+# 更新时间: 2025-08-21
+
+# 导入标准库
 import uuid
 import json
 from datetime import datetime
