@@ -21,7 +21,7 @@ import logging
 import math
 
 # 导入项目基础组件
-from ..communication.protocols import MessageType, AgentMessage
+from config import MessageType, AgentMessage
 
 
 class ActionType(Enum):

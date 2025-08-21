@@ -39,11 +39,14 @@ from .base_agent import (
     BaseRobotAgent, AgentState, TaskStatus,
     TaskDefinition, AgentCapability, ToolDefinition
 )
-from ..communication.protocols import (
-    MessageType, AgentMessage, MessagePriority, CollaborationMode,
-    TaskMessage, ResponseMessage, StatusMessage
+from config import (
+    MessageType, AgentMessage, MessagePriority, TaskMessage, ResponseMessage,
+    IntentType, MessageAnalysis
 )
-from ..communication.message_bus import get_message_bus
+from src.communication.protocols import (
+    CollaborationMode, StatusMessage
+)
+from src.communication.message_bus import get_message_bus
 
 # 导入CAMEL框架组件
 try:
@@ -352,9 +355,56 @@ class ChatAgent(BaseRobotAgent):
         """
         构建系统提示
         
+        从chat_agent_prompt_template.json文件加载提示词模板，
+        如果加载失败则使用默认提示词。
+        
         Returns:
             str: 系统提示文本
         """
+        try:
+            # 尝试从JSON配置文件加载提示词模板
+            import os
+            from pathlib import Path
+            
+            # 获取项目根目录
+            current_file = Path(__file__)
+            project_root = current_file.parent.parent.parent
+            config_path = project_root / "config" / "chat_agent_prompt_template.json"
+            
+            if config_path.exists():
+                with open(config_path, 'r', encoding='utf-8') as f:
+                    prompt_config = json.load(f)
+                
+                # 将JSON配置转换为系统提示词
+                system_prompt = f"""
+你是一个基于多维行为树结构的智能助手。
+
+设计理念：{prompt_config['overview']['设计理念']}
+
+核心目标：
+{chr(10).join(f"- {goal}" for goal in prompt_config['overview']['核心目标'])}
+
+工作流程：
+"""
+                
+                for stage in prompt_config['process']:
+                    system_prompt += f"\n{stage['阶段']}：{stage['目标']}\n"
+                    for detail in stage['细节']:
+                        system_prompt += f"  • {detail['项']}：{detail['说明']}\n"
+                        if '范例' in detail:
+                            system_prompt += f"    范例：{detail['范例']}\n"
+                
+                system_prompt += f"\n期望效果：{prompt_config['expectation']}"
+                
+                self.logger.info("成功加载chat_agent_prompt_template.json提示词模板")
+                return system_prompt
+            else:
+                self.logger.warning(f"提示词模板文件不存在: {config_path}")
+                
+        except Exception as e:
+            self.logger.error(f"加载提示词模板失败: {e}")
+        
+        # 如果加载失败，使用默认提示词
         language = self.config.get('language', 'zh-CN')
         response_style = self.config.get('response_style', 'friendly')
         
@@ -434,11 +484,8 @@ Please provide appropriate responses based on user input.
         # 对话清理任务
         self._cleanup_interval = self.config.get('context_retention_hours', 24) * 3600
         
-        # 启动定期清理任务
-        if hasattr(self, '_cleanup_task'):
-            self._cleanup_task.cancel()
-        
-        self._cleanup_task = asyncio.create_task(self._periodic_cleanup())
+        # 注意：定期清理任务将在异步环境中启动
+        self._cleanup_task = None
         
         self.logger.info("对话管理器初始化完成")
     
@@ -459,34 +506,98 @@ Please provide appropriate responses based on user input.
         
         注册对话相关的工具和功能.
         """
-        tools = [
-            ToolDefinition(
-                tool_id="conversation_analysis",
-                name="对话分析",
-                description="分析用户消息的意图、情感和关键信息",
-                parameters={"message": "str"},
-                returns="MessageAnalysis"
-            ),
-            ToolDefinition(
-                tool_id="context_summarization",
-                name="上下文总结",
-                description="总结对话历史和关键信息",
-                parameters={"conversation_id": "str"},
-                returns="str"
-            ),
-            ToolDefinition(
-                tool_id="response_generation",
-                name="回复生成",
-                description="基于上下文生成合适的回复",
-                parameters={"context": "ConversationContext", "message": "str"},
-                returns="str"
-            )
-        ]
+        # 注册对话分析工具
+        self.register_tool(
+            name="conversation_analysis",
+            description="分析用户消息的意图、情感和关键信息",
+            function=self._analyze_conversation,
+            parameters_schema={
+                "type": "object",
+                "properties": {
+                    "message": {"type": "string", "description": "要分析的消息"}
+                },
+                "required": ["message"]
+            },
+            category="conversation"
+        )
         
-        for tool in tools:
-            self.register_tool(tool)
+        # 注册上下文总结工具
+        self.register_tool(
+            name="context_summarization",
+            description="总结对话历史和关键信息",
+            function=self._summarize_context,
+            parameters_schema={
+                "type": "object",
+                "properties": {
+                    "conversation_id": {"type": "string", "description": "对话ID"}
+                },
+                "required": ["conversation_id"]
+            },
+            category="conversation"
+        )
         
-        self.logger.info(f"注册了 {len(tools)} 个专业化工具")
+        # 注册回复生成工具
+        self.register_tool(
+            name="response_generation",
+            description="基于上下文生成合适的回复",
+            function=self._generate_response,
+            parameters_schema={
+                "type": "object",
+                "properties": {
+                    "context": {"type": "object", "description": "对话上下文"},
+                    "message": {"type": "string", "description": "用户消息"}
+                },
+                "required": ["context", "message"]
+            },
+            category="conversation"
+        )
+        
+        self.logger.info("注册了 3 个专业化工具")
+    
+    def _analyze_conversation(self, message: str) -> dict:
+        """
+        分析对话消息
+        
+        Args:
+            message: 要分析的消息
+            
+        Returns:
+            分析结果字典
+        """
+        # 简单的意图和情感分析实现
+        return {
+            "intent": "general_conversation",
+            "sentiment": "neutral",
+            "keywords": message.split()[:5],
+            "confidence": 0.8
+        }
+    
+    def _summarize_context(self, conversation_id: str) -> str:
+        """
+        总结对话上下文
+        
+        Args:
+            conversation_id: 对话ID
+            
+        Returns:
+            上下文总结
+        """
+        # 简单的上下文总结实现
+        return f"对话 {conversation_id} 的上下文总结"
+    
+    def _generate_response(self, context: dict, message: str) -> str:
+        """
+        生成回复
+        
+        Args:
+            context: 对话上下文
+            message: 用户消息
+            
+        Returns:
+            生成的回复
+        """
+        # 简单的回复生成实现
+        return f"基于上下文对消息 '{message}' 的回复"
     
     def _add_specialized_capabilities(self):
         """
@@ -496,34 +607,39 @@ Please provide appropriate responses based on user input.
         """
         capabilities = [
             AgentCapability(
-                capability_id="natural_language_understanding",
                 name="自然语言理解",
                 description="理解和解析自然语言输入",
-                level="expert"
+                input_types=["text", "voice"],
+                output_types=["intent", "entities"],
+                confidence=0.9
             ),
             AgentCapability(
-                capability_id="dialogue_management",
                 name="对话管理",
                 description="管理多轮对话和上下文",
-                level="expert"
+                input_types=["conversation_context"],
+                output_types=["dialogue_state"],
+                confidence=0.85
             ),
             AgentCapability(
-                capability_id="emotion_recognition",
                 name="情感识别",
                 description="识别和分析用户情感状态",
-                level="intermediate"
+                input_types=["text", "voice"],
+                output_types=["emotion", "sentiment"],
+                confidence=0.75
             ),
             AgentCapability(
-                capability_id="intent_classification",
                 name="意图分类",
                 description="识别用户意图和需求",
-                level="expert"
+                input_types=["text"],
+                output_types=["intent", "confidence"],
+                confidence=0.9
             ),
             AgentCapability(
-                capability_id="response_generation",
                 name="回复生成",
                 description="生成自然、合适的回复",
-                level="expert"
+                input_types=["context", "intent"],
+                output_types=["response"],
+                confidence=0.8
             )
         ]
         

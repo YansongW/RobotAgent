@@ -1,7 +1,11 @@
-#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-# 机器人对话验证工具
-# 使用OpenAI SDK调用火山方舟的Chat API，实现命令行对话功能
+
+# 火山方舟对话测试工具 (Volcengine Chat Test Tool)
+# 验证火山方舟API配置和对话功能
+# 作者: RobotAgent开发团队
+# 版本: 0.0.1 (Initial Release)
+# 更新时间: 2024-01-20
+# 基于: BaseRobotAgent v0.0.1
 
 import os
 import json
@@ -17,13 +21,27 @@ sys.path.append(str(project_root))
 from src.utils.config_loader import config_loader
 
 class VolcengineChatClient:
+    """
+    火山方舟对话客户端
+    
+    封装火山方舟API调用功能，提供简单易用的对话接口。
+    支持配置文件加载、对话历史管理和系统提示词设置。
+    """
+    
     def __init__(self, api_key: str = None, model_id: str = None, config: dict = None):
-        # 初始化火山方舟Chat客户端
-        # 
-        # Args:
-        #     api_key: 火山方舟API密钥，如果为None则从配置文件加载
-        #     model_id: 模型ID，如果为None则从配置文件加载
-        #     config: 配置字典，如果为None则从配置文件加载
+        """
+        初始化火山方舟Chat客户端
+        
+        从配置文件或参数中加载API配置，初始化OpenAI客户端。
+        
+        Args:
+            api_key: 火山方舟API密钥，如果为None则从配置文件加载
+            model_id: 模型ID，如果为None则从配置文件加载
+            config: 配置字典，如果为None则从配置文件加载
+            
+        Raises:
+            ValueError: 当API配置无效或缺失时
+        """
         # 加载配置
         if config is None:
             try:
@@ -53,10 +71,18 @@ class VolcengineChatClient:
         self.system_prompt = self._load_system_prompt()
         
     def _load_system_prompt(self) -> str:
-        # 从配置文件加载系统提示词
-        # 
-        # Returns:
-        #     格式化后的系统提示词字符串
+        """
+        从配置文件加载系统提示词
+        
+        读取chat_agent_prompt_template.json文件，将JSON配置转换为
+        格式化的系统提示词字符串。
+        
+        Returns:
+            格式化后的系统提示词字符串
+            
+        Note:
+            如果配置文件加载失败，将返回默认的系统提示词
+        """
         try:
             config_path = project_root / "config" / "chat_agent_prompt_template.json"
             with open(config_path, 'r', encoding='utf-8') as f:
@@ -90,13 +116,21 @@ class VolcengineChatClient:
             return "你是一个智能助手，请用自然、友好的方式与用户对话。"
     
     def chat(self, user_message: str) -> str:
-        # 发送消息并获取回复
-        # 
-        # Args:
-        #     user_message: 用户输入的消息
-        #     
-        # Returns:
-        #     AI助手的回复
+        """
+        发送消息并获取回复
+        
+        向火山方舟API发送用户消息，获取AI助手的回复。
+        自动管理对话历史记录。
+        
+        Args:
+            user_message: 用户输入的消息
+            
+        Returns:
+            AI助手的回复字符串
+            
+        Raises:
+            Exception: 当API调用失败时
+        """
         try:
             # 构建消息列表
             messages = [{"role": "system", "content": self.system_prompt}]

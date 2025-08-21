@@ -11,6 +11,7 @@ import asyncio
 import uuid
 import json
 import hashlib
+import os
 from datetime import datetime, timedelta
 from typing import Dict, List, Any, Optional, Union, Tuple
 from enum import Enum
@@ -20,12 +21,20 @@ import numpy as np
 from pathlib import Path
 
 # 导入项目基础组件
-from .base_agent import BaseRobotAgent, TaskStatus
-from ..communication.protocols import (
-    MessageType, AgentMessage, MessagePriority, CollaborationMode,
-    TaskMessage, ResponseMessage, StatusMessage, MemoryMessage
+from .base_agent import BaseRobotAgent
+from config import (
+    MessageType, AgentMessage, MessagePriority, TaskMessage, ResponseMessage,
+    TaskStatus, MemoryType, MemoryPriority, MemoryItem
 )
-from ..communication.message_bus import get_message_bus
+from src.communication.protocols import (
+    CollaborationMode, StatusMessage, MemoryMessage
+)
+from src.communication.message_bus import get_message_bus
+
+# 导入记忆管理组件
+from ..memory.graph_storage import GraphStorage
+from ..memory.knowledge_retriever import KnowledgeRetriever, RetrievalMode
+from ..memory import embedding_model
 
 # 导入CAMEL框架组件
 try:
@@ -194,6 +203,15 @@ class MemoryAgent(BaseRobotAgent):
         self.similarity_threshold = self.config.get("similarity_threshold", 0.7)
         self.decay_rate = self.config.get("decay_rate", 0.1)
         
+        # 知识图谱和向量检索组件
+        storage_path = self.config.get("storage_path", "data/memory")
+        self.graph_storage = GraphStorage(storage_path)
+        self.knowledge_retriever = KnowledgeRetriever(self.graph_storage)
+        
+        # 对话历史管理
+        self.conversation_history: List[Dict[str, Any]] = []
+        self.max_conversation_history = self.config.get("max_conversation_history", 100)
+        
         # 统计信息
         self.memory_stats = {
             "total_memories": 0,
@@ -203,7 +221,8 @@ class MemoryAgent(BaseRobotAgent):
             "search_queries": 0,
             "successful_retrievals": 0,
             "knowledge_nodes": 0,
-            "knowledge_edges": 0
+            "knowledge_edges": 0,
+            "knowledge_extractions": 0
         }
         
         # 启动后台任务
@@ -267,6 +286,9 @@ class MemoryAgent(BaseRobotAgent):
             # 更新知识图谱
             await self._update_knowledge_graph(memory_item)
             
+            # 提取并存储知识到图谱
+            await self._extract_and_store_knowledge(memory_item)
+            
             # 更新统计信息
             self._update_memory_stats(memory_type)
             
@@ -289,26 +311,22 @@ class MemoryAgent(BaseRobotAgent):
         try:
             self.memory_stats["search_queries"] += 1
             
-            # 生成查询向量
-            query_embedding = await self._generate_embedding(query.query_text)
+            # 使用知识检索器进行多模式检索
+            kg_results = await self._retrieve_from_knowledge_graph(query)
             
-            # 多层检索
-            candidates = await self._multi_layer_search(query, query_embedding)
+            # 传统记忆检索（作为补充）
+            traditional_results = await self._traditional_memory_search(query)
             
-            # 相似度计算和排序
-            results = await self._rank_search_results(candidates, query_embedding, query)
+            # 合并和去重结果
+            combined_results = await self._merge_search_results(kg_results, traditional_results)
             
             # 更新访问记录
-            await self._update_access_records(results)
+            await self._update_access_records(combined_results)
             
-            # 关联记忆扩展
-            if query.include_related:
-                results = await self._expand_with_related_memories(results)
+            self.memory_stats["successful_retrievals"] += len(combined_results)
             
-            self.memory_stats["successful_retrievals"] += len(results)
-            
-            self.logger.info(f"记忆检索完成，返回 {len(results)} 个结果")
-            return results[:query.max_results]
+            self.logger.info(f"记忆检索完成，返回 {len(combined_results)} 个结果")
+            return combined_results[:query.max_results]
             
         except Exception as e:
             self.logger.error(f"记忆检索失败: {str(e)}")
@@ -391,6 +409,10 @@ class MemoryAgent(BaseRobotAgent):
         Returns:
             记忆系统统计信息
         """
+        # 获取图存储统计信息
+        graph_stats = await self.graph_storage.get_statistics() if hasattr(self, 'graph_storage') else {}
+        retriever_stats = await self.knowledge_retriever.get_statistics() if hasattr(self, 'knowledge_retriever') else {}
+        
         return {
             "statistics": self.memory_stats.copy(),
             "memory_distribution": {
@@ -402,6 +424,9 @@ class MemoryAgent(BaseRobotAgent):
                 "nodes": len(self.knowledge_nodes),
                 "edges": len(self.knowledge_edges)
             },
+            "graph_storage_stats": graph_stats,
+            "retriever_stats": retriever_stats,
+            "conversation_history_length": len(getattr(self, 'conversation_history', [])),
             "top_tags": self._get_top_tags(10),
             "recent_activity": await self._get_recent_activity()
         }
@@ -851,8 +876,291 @@ class MemoryAgent(BaseRobotAgent):
         except Exception as e:
             return {"success": False, "error": str(e)}
 
+    async def _extract_and_store_knowledge(self, memory_item: MemoryItem):
+        """从记忆项中提取知识并存储到图谱"""
+        try:
+            content_str = str(memory_item.content)
+            
+            # 提取实体
+            entities = await self._extract_entities_advanced(content_str)
+            
+            # 提取关系
+            relationships = await self._extract_relationships_advanced(content_str, entities)
+            
+            # 存储到图谱
+            for entity in entities:
+                await self.graph_storage.add_entity(
+                    entity_id=entity["id"],
+                    entity_type=entity["type"],
+                    properties=entity["properties"]
+                )
+                
+                # 为重要实体创建文档向量存储
+                if entity["importance"] > 0.7:
+                    await self.graph_storage.add_entity_document(
+                        entity["id"], content_str, memory_item.metadata or {}
+                    )
+            
+            for relationship in relationships:
+                await self.graph_storage.add_relationship(
+                    source_id=relationship["source"],
+                    target_id=relationship["target"],
+                    relation_type=relationship["type"],
+                    properties=relationship["properties"]
+                )
+            
+            self.memory_stats["knowledge_extractions"] += 1
+            
+        except Exception as e:
+            self.logger.error(f"知识提取失败: {str(e)}")
+    
+    async def _extract_entities_advanced(self, content: str) -> List[Dict[str, Any]]:
+        """高级实体提取"""
+        entities = []
+        
+        # 简化的实体提取逻辑（实际应使用NER模型）
+        words = content.split()
+        for i, word in enumerate(words):
+            if len(word) > 3 and word.isalpha():
+                entity = {
+                    "id": f"entity_{hash(word) % 10000}",
+                    "type": "concept",
+                    "properties": {
+                        "name": word,
+                        "context": " ".join(words[max(0, i-2):i+3]),
+                        "position": i
+                    },
+                    "importance": min(1.0, len(word) / 10.0)
+                }
+                entities.append(entity)
+        
+        return entities[:10]  # 限制数量
+    
+    async def _extract_relationships_advanced(self, content: str, entities: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """高级关系提取"""
+        relationships = []
+        
+        # 简化的关系提取逻辑
+        for i in range(len(entities) - 1):
+            for j in range(i + 1, min(i + 3, len(entities))):
+                relationship = {
+                    "source": entities[i]["id"],
+                    "target": entities[j]["id"],
+                    "type": "co_occurrence",
+                    "properties": {
+                        "distance": j - i,
+                        "context": content[:200]
+                    }
+                }
+                relationships.append(relationship)
+        
+        return relationships
+    
+    async def _retrieve_from_knowledge_graph(self, query: SearchQuery) -> List[SearchResult]:
+        """从知识图谱检索记忆"""
+        try:
+            # 使用不同的检索模式
+            results = []
+            
+            # 快速检索
+            quick_results = await self.knowledge_retriever.retrieve(
+                query.query_text, RetrievalMode.QUICK, max_results=query.max_results // 2
+            )
+            
+            # 联想检索
+            associate_results = await self.knowledge_retriever.retrieve(
+                query.query_text, RetrievalMode.ASSOCIATE, max_results=query.max_results // 2
+            )
+            
+            # 转换为SearchResult格式
+            for item in quick_results + associate_results:
+                if item.memory_id in self.memory_index:
+                    memory_item = self.memory_index[item.memory_id]
+                    search_result = SearchResult(
+                        memory_item=memory_item,
+                        similarity_score=item.similarity_score,
+                        relevance_score=item.relevance_score
+                    )
+                    results.append(search_result)
+            
+            return results
+            
+        except Exception as e:
+            self.logger.error(f"知识图谱检索失败: {str(e)}")
+            return []
+    
+    async def _traditional_memory_search(self, query: SearchQuery) -> List[SearchResult]:
+        """传统记忆搜索（原有逻辑）"""
+        try:
+            # 生成查询向量
+            query_embedding = await self._generate_embedding(query.query_text)
+            
+            # 多层检索
+            candidates = await self._multi_layer_search(query, query_embedding)
+            
+            # 相似度计算和排序
+            results = await self._rank_search_results(candidates, query_embedding, query)
+            
+            return results
+            
+        except Exception as e:
+            self.logger.error(f"传统记忆搜索失败: {str(e)}")
+            return []
+    
+    async def _merge_search_results(self, kg_results: List[SearchResult], 
+                                   traditional_results: List[SearchResult]) -> List[SearchResult]:
+        """合并搜索结果并去重"""
+        seen_ids = set()
+        merged_results = []
+        
+        # 优先使用知识图谱结果
+        for result in kg_results:
+            if result.memory_item.id not in seen_ids:
+                seen_ids.add(result.memory_item.id)
+                merged_results.append(result)
+        
+        # 添加传统搜索结果
+        for result in traditional_results:
+            if result.memory_item.id not in seen_ids:
+                seen_ids.add(result.memory_item.id)
+                merged_results.append(result)
+        
+        # 按相关性分数排序
+        merged_results.sort(key=lambda x: x.relevance_score, reverse=True)
+        
+        return merged_results
+    
+    async def get_relevant_memories_for_prompt(self, query: str, max_memories: int = 5) -> str:
+        """获取相关记忆并格式化为提示词"""
+        try:
+            search_query = SearchQuery(
+                query_text=query,
+                max_results=max_memories,
+                similarity_threshold=0.6
+            )
+            
+            results = await self.retrieve_memory(search_query)
+            
+            if not results:
+                return "暂无相关记忆。"
+            
+            # 格式化为提示词
+            formatted_memories = []
+            for i, result in enumerate(results, 1):
+                memory_content = str(result.memory_item.content)[:200]
+                formatted_memory = f"{i}. {memory_content}... (相关度: {result.relevance_score:.2f})"
+                formatted_memories.append(formatted_memory)
+            
+            return "\n".join(formatted_memories)
+            
+        except Exception as e:
+            self.logger.error(f"获取相关记忆失败: {str(e)}")
+            return "记忆检索出现错误。"
+    
+    async def add_conversation_turn(self, user_input: str, agent_response: str, agent_id: str):
+        """添加对话轮次并管理对话历史"""
+        try:
+            conversation_turn = {
+                "timestamp": datetime.now().isoformat(),
+                "user_input": user_input,
+                "agent_response": agent_response,
+                "agent_id": agent_id
+            }
+            
+            self.conversation_history.append(conversation_turn)
+            
+            # 限制对话历史长度
+            if len(self.conversation_history) > self.max_conversation_history:
+                self.conversation_history = self.conversation_history[-self.max_conversation_history:]
+            
+            # 异步提取对话知识
+            asyncio.create_task(self._extract_conversation_knowledge(conversation_turn))
+            
+        except Exception as e:
+            self.logger.error(f"添加对话轮次失败: {str(e)}")
+    
+    async def _extract_conversation_knowledge(self, conversation_turn: Dict[str, Any]):
+        """从对话中提取知识"""
+        try:
+            # 存储用户输入记忆
+            await self.store_memory(
+                content=conversation_turn["user_input"],
+                memory_type=MemoryType.SHORT_TERM,
+                source_agent="user",
+                tags=["conversation", "user_input"],
+                priority=MemoryPriority.MEDIUM,
+                metadata={
+                    "timestamp": conversation_turn["timestamp"],
+                    "conversation_turn": True
+                }
+            )
+            
+            # 存储智能体响应记忆
+            await self.store_memory(
+                content=conversation_turn["agent_response"],
+                memory_type=MemoryType.SHORT_TERM,
+                source_agent=conversation_turn["agent_id"],
+                tags=["conversation", "agent_response"],
+                priority=MemoryPriority.MEDIUM,
+                metadata={
+                    "timestamp": conversation_turn["timestamp"],
+                    "conversation_turn": True
+                }
+            )
+            
+        except Exception as e:
+            self.logger.error(f"对话知识提取失败: {str(e)}")
+    
+    async def save_memory_data(self):
+        """保存记忆数据"""
+        try:
+            await self.graph_storage.save()
+            self.logger.info("记忆数据保存成功")
+        except Exception as e:
+            self.logger.error(f"记忆数据保存失败: {str(e)}")
+    
+    async def execute_task(self, task_data: Dict[str, Any]) -> Dict[str, Any]:
+        """执行记忆相关任务"""
+        task_type = task_data.get("type")
+        
+        if task_type == "store_memory":
+            return await self._handle_store_request(task_data)
+        elif task_type == "retrieve_memory":
+            return await self._handle_retrieve_request(task_data)
+        elif task_type == "get_summary":
+            return {"success": True, "summary": await self.get_memory_summary()}
+        else:
+            return {
+                "success": False,
+                "error": f"Unknown task type: {task_type}"
+            }
+    
     async def cleanup(self):
         """清理资源"""
+        # 保存记忆数据
+        await self.save_memory_data()
+        
+        # 清理图存储和检索缓存
+        if hasattr(self, 'graph_storage') and self.graph_storage:
+            # GraphStorage清理方法（如果存在）
+            if hasattr(self.graph_storage, 'cleanup'):
+                try:
+                    cleanup_result = self.graph_storage.cleanup()
+                    if hasattr(cleanup_result, '__await__'):
+                        await cleanup_result
+                except Exception as e:
+                    self.logger.warning(f"图存储清理失败: {e}")
+        
+        if hasattr(self, 'knowledge_retriever') and self.knowledge_retriever:
+            # KnowledgeRetriever清理方法（如果存在）
+            if hasattr(self.knowledge_retriever, 'cleanup'):
+                try:
+                    cleanup_result = self.knowledge_retriever.cleanup()
+                    if hasattr(cleanup_result, '__await__'):
+                        await cleanup_result
+                except Exception as e:
+                    self.logger.warning(f"知识检索器清理失败: {e}")
+        
         # 取消后台任务
         for task in self._background_tasks:
             task.cancel()

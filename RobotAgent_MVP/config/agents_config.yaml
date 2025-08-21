@@ -1,15 +1,125 @@
-# 智能体配置文件
-# 配置Chat Agent、Action Agent、Memory Agent的参数
+# -*- coding: utf-8 -*-
 
+# 智能体配置文件 (Agents Configuration)
+# RobotAgent MVP各类智能体的专业化配置参数
+# 作者: RobotAgent开发团队
+# 版本: 0.0.1 (Initial Release)
+# 更新时间: 2025-08-21
+# 基于: CAMEL框架的智能体配置标准
+
+# 对话智能体配置 (Chat Agent Configuration)
+# 基于CAMEL框架的自然语言处理智能体配置
+# 专注于多轮对话管理、自然语言理解和生成
 chat_agent:
+  # 语言模型配置
+  # 使用的大语言模型名称，支持多种模型后端
   model: "qwen-7b"
+  
+  # 最大生成令牌数 - 控制单次响应的最大长度
+  # 建议值: 1024-4096，根据任务复杂度调整
   max_tokens: 2048
+  
+  # 生成温度 - 控制响应的创造性和随机性
+  # 范围: 0.0-2.0，0.0最保守，2.0最创新
   temperature: 0.7
+  
+  # 对话上下文窗口大小 - 保持的历史对话轮数
+  context_window_size: 10
+  
+  # 响应生成超时时间（秒）
+  response_timeout: 30
+  
+  # 情感分析功能开关
+  emotion_analysis_enabled: true
+  
+  # 意图识别功能开关
+  intent_recognition_enabled: true
+  
+  # 多轮对话状态管理开关
+  conversation_state_tracking: true
 
+# 动作智能体配置 (Action Agent Configuration)
+# 负责任务规划、动作执行和安全检查的智能体配置
+# 专注于将自然语言指令转换为具体的执行动作
 action_agent:
+  # 规划时间范围 - 前瞻性规划的步骤数
+  # 建议值: 3-10步，根据任务复杂度调整
   planning_horizon: 5
+  
+  # 安全检查开关 - 执行动作前的安全验证
   safety_check: true
+  
+  # 动作执行超时时间（秒）
+  action_timeout: 60
+  
+  # 最大重试次数 - 动作执行失败时的重试次数
+  max_retry_attempts: 3
+  
+  # 动作验证开关 - 执行后的结果验证
+  action_verification: true
+  
+  # 并行动作执行开关
+  parallel_execution: false
+  
+  # 动作日志记录级别
+  action_log_level: "INFO"
 
+# 记忆智能体配置 (Memory Agent Configuration)
+# 负责知识存储、检索和学习的智能体配置
+# 专注于长期记忆管理和知识图谱构建
 memory_agent:
+  # 最大历史记录数 - 保存的历史交互数量
+  # 建议值: 100-1000，根据存储容量调整
   max_history: 100
+  
+  # 学习率 - 知识更新和权重调整的速度
+  # 范围: 0.001-0.1，影响学习收敛速度
   learning_rate: 0.01
+  
+  # 记忆衰减因子 - 旧记忆的重要性衰减速度
+  memory_decay_factor: 0.95
+  
+  # 知识图谱更新间隔（分钟）
+  knowledge_graph_update_interval: 30
+  
+  # 相似度阈值 - 记忆检索的最小相似度
+  similarity_threshold: 0.7
+  
+  # 记忆压缩开关 - 自动压缩冗余记忆
+  memory_compression: true
+  
+  # 长期记忆存储路径
+  long_term_memory_path: "src/memory/long_term"
+
+# 协作配置 (Collaboration Configuration)
+# 智能体间协作和通信的配置参数
+collaboration:
+  # 协作模式 - 智能体间的协作策略
+  # 可选值: sequential, parallel, hierarchical
+  collaboration_mode: "sequential"
+  
+  # 任务分发策略
+  # 可选值: round_robin, load_balanced, capability_based
+  task_distribution_strategy: "capability_based"
+  
+  # 协作超时时间（秒）
+  collaboration_timeout: 120
+  
+  # 冲突解决策略
+  # 可选值: priority_based, voting, consensus
+  conflict_resolution: "priority_based"
+
+# 性能优化配置 (Performance Configuration)
+# 智能体性能优化相关的配置参数
+performance:
+  # 批处理大小 - 批量处理任务的数量
+  batch_size: 5
+  
+  # 缓存开关 - 启用智能体响应缓存
+  caching_enabled: true
+  
+  # 缓存过期时间（分钟）
+  cache_expiry_minutes: 60
+  
+  # 预加载模型开关 - 启动时预加载模型
+  preload_models: true

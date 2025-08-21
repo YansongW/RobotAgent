@@ -8,6 +8,12 @@ camel-ai>=0.1.0
 pydantic>=2.0.0
 pyyaml>=6.0
 asyncio-mqtt>=0.11.0
+numpy>=1.24.0
+
+# 机器学习和嵌入模型
+sentence-transformers>=2.2.0
+torch>=2.0.0
+transformers>=4.30.0
 
 # 语音处理
 pyttsx3>=2.90
@@ -19,7 +25,18 @@ python-dotenv>=1.0.0
 
 # API调用
 openai>=1.0.0
+requests>=2.31.0
+
+# 数据处理
+pandas>=2.0.0
+
+# 图存储和知识检索
+networkx>=3.1
 
 # 测试
 pytest>=7.0.0
 pytest-asyncio>=0.21.0
+
+# 开发工具
+black>=23.0.0
+flake8>=6.0.0

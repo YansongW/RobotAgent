@@ -19,7 +19,8 @@ from collections import defaultdict, deque
 import weakref
 
 # 导入项目基础组件
-from .protocols import MessageType, MessagePriority, AgentMessage, CollaborationRequest, CollaborationResponse
+from config import MessageType, MessagePriority, AgentMessage
+from src.communication.protocols import CollaborationRequest, CollaborationResponse
 
 
 class MessageBusStatus(Enum):

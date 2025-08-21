@@ -16,7 +16,7 @@ from collections import deque
 import logging
 
 # 导入项目基础组件
-from ..communication.protocols import MessageType, AgentMessage
+from config import MessageType, AgentMessage
 
 
 @dataclass

@@ -18,13 +18,16 @@ from enum import Enum
 from .chat_agent import ChatAgent
 from .action_agent import ActionAgent
 from .memory_agent import MemoryAgent
-from ..communication.protocols import (
-    MessageType, AgentMessage, MessagePriority, CollaborationMode,
-    TaskMessage, ResponseMessage, StatusMessage, CollaborationRequest,
-    CollaborationResponse, MemoryMessage, create_task_message,
+from config import (
+    MessageType, AgentMessage, MessagePriority, TaskMessage, ResponseMessage,
+    create_task_message
+)
+from src.communication.protocols import (
+    CollaborationMode, StatusMessage, CollaborationRequest,
+    CollaborationResponse, MemoryMessage,
     create_collaboration_request, create_memory_message
 )
-from ..communication.message_bus import get_message_bus, MessageBus
+from src.communication.message_bus import get_message_bus, MessageBus
 
 
 class CoordinationMode(Enum):

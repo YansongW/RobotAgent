@@ -16,12 +16,15 @@ from enum import Enum
 from dataclasses import dataclass, asdict
 
 # 导入项目基础组件
-from .base_agent import BaseRobotAgent, TaskStatus
-from ..communication.protocols import (
-    MessageType, AgentMessage, MessagePriority, CollaborationMode,
-    TaskMessage, ResponseMessage, StatusMessage, MemoryMessage
+from .base_agent import BaseRobotAgent
+from config import (
+    MessageType, AgentMessage, MessagePriority, TaskMessage, ResponseMessage,
+    TaskStatus
 )
-from ..communication.message_bus import get_message_bus
+from src.communication.protocols import (
+    CollaborationMode, StatusMessage, MemoryMessage
+)
+from src.communication.message_bus import get_message_bus
 
 # 导入CAMEL框架组件
 try:

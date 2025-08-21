@@ -21,12 +21,15 @@ import uuid
 import traceback
 
 # 导入通信协议和消息总线
-from ..communication.protocols import (
+from config import (
     AgentMessage, MessageType, MessagePriority, TaskMessage, ResponseMessage,
-    StatusMessage, CollaborationRequest, CollaborationResponse, MemoryMessage,
-    ToolMessage, MessageProtocol, MessageValidator, AgentRole
+    ToolMessage, MessageProtocol, TaskStatus, TaskDefinition
 )
-from ..communication.message_bus import MessageBus, get_message_bus
+from src.communication.protocols import (
+    StatusMessage, CollaborationRequest, CollaborationResponse, MemoryMessage,
+    MessageValidator, AgentRole, CollaborationMode
+)
+from src.communication.message_bus import MessageBus, get_message_bus
 
 # CAMEL框架核心组件导入
 try:
@@ -290,7 +293,7 @@ class BaseRobotAgent(ABC):
         
         # === 初始化完成 ===
         self.logger.info(f"智能体 {self.agent_id} ({self.agent_type}) 初始化完成")
-        asyncio.create_task(self._set_state(AgentState.IDLE))
+        # 注意：状态设置将在异步环境中进行
     
     def _init_camel_agent(self):
 
@@ -425,7 +428,7 @@ class BaseRobotAgent(ABC):
         # 支持工具调用和协作消息的处理。
 
         self._message_handlers = {
-            MessageType.TEXT: self._handle_text_message,
+            MessageType.INSTRUCTION: self._handle_text_message,
             MessageType.TASK: self._handle_task_message,
             MessageType.INSTRUCTION: self._handle_instruction_message,
             MessageType.TOOL_CALL: self._handle_tool_call_message,
@@ -433,7 +436,7 @@ class BaseRobotAgent(ABC):
             MessageType.STATUS: self._handle_status_message,
             MessageType.ERROR: self._handle_error_message,
             MessageType.HEARTBEAT: self._handle_heartbeat_message,
-            MessageType.COLLABORATION: self._handle_collaboration_message,
+            MessageType.COLLABORATION_REQUEST: self._handle_collaboration_message,
         }
     
     def _register_default_tools(self):
@@ -636,7 +639,7 @@ class BaseRobotAgent(ABC):
     async def send_message(self, 
                           recipient: str, 
                           content: Any, 
-                          message_type: MessageType = MessageType.TEXT,
+                          message_type: MessageType = MessageType.INSTRUCTION,
                           metadata: Dict[str, Any] = None,
                           conversation_id: str = None) -> str:
         # 发送消息给其他智能体
@@ -1166,7 +1169,7 @@ class BaseRobotAgent(ABC):
         message_id = await self.send_message(
             recipient=partner_id,
             content=collaboration_request,
-            message_type=MessageType.COLLABORATION
+            message_type=MessageType.COLLABORATION_REQUEST
         )
         
         # 记录协作请求
@@ -1208,7 +1211,7 @@ class BaseRobotAgent(ABC):
         await self.send_message(
             recipient=requester,
             content=response_data,
-            message_type=MessageType.COLLABORATION,
+            message_type=MessageType.COLLABORATION_REQUEST,
             conversation_id=message.conversation_id
         )
     
@@ -1336,7 +1339,7 @@ class BaseRobotAgent(ABC):
             
             # 将重要记忆转移到长期记忆
             for msg in removed_messages:
-                if msg.message_type in [MessageType.TASK, MessageType.COLLABORATION]:
+                if msg.message_type in [MessageType.TASK, MessageType.COLLABORATION_REQUEST]:
                     memory_key = f"important_{msg.message_id}"
                     self._long_term_memory[memory_key] = {
                         'message': msg,
@@ -1533,7 +1536,7 @@ class AgentFactory:
     def create_agent(agent_type: str, 
                     agent_id: str, 
                     config: Dict[str, Any] = None,
-                    collaboration_mode: CollaborationMode = CollaborationMode.PEER_TO_PEER) -> 'BaseRobotAgent':
+                    collaboration_mode: CollaborationMode = CollaborationMode.DIRECT) -> 'BaseRobotAgent':
         # 创建智能体实例
         # 
         # Args:
@@ -1626,7 +1629,7 @@ if __name__ == "__main__":
         await agent.send_message(
             recipient="test_recipient",
             content="Hello, World!",
-            message_type=MessageType.TEXT
+            message_type=MessageType.INSTRUCTION
         )
         
         # 测试工具调用
