@@ -384,7 +384,7 @@ class ChatAgent(BaseRobotAgent):
             # 获取项目根目录
             current_file = Path(__file__)
             project_root = current_file.parent.parent.parent
-            config_path = project_root / "config" / "chat_agent_prompt_template.json"
+            config_path = project_root / "config" / "prompts" / "chat_agent_prompt_template.json"
             
             if config_path.exists():
                 with open(config_path, 'r', encoding='utf-8') as f:

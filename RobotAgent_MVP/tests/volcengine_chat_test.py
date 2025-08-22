@@ -84,7 +84,7 @@ class VolcengineChatClient:
             如果配置文件加载失败，将返回默认的系统提示词
         """
         try:
-            config_path = project_root / "config" / "chat_agent_prompt_template.json"
+            config_path = project_root / "config" / "prompts" / "chat_agent_prompt_template.json"
             with open(config_path, 'r', encoding='utf-8') as f:
                 prompt_config = json.load(f)
             
