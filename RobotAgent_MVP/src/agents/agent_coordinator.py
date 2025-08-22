@@ -19,13 +19,12 @@ from .chat_agent import ChatAgent
 from .action_agent import ActionAgent
 from .memory_agent import MemoryAgent
 from config import (
-    MessageType, AgentMessage, MessagePriority, TaskMessage, ResponseMessage,
-    create_task_message
+    MessageType, AgentMessage, MessagePriority, TaskMessage, ResponseMessage
 )
 from src.communication.protocols import (
     CollaborationMode, StatusMessage, CollaborationRequest,
     CollaborationResponse, MemoryMessage,
-    create_collaboration_request, create_memory_message
+    create_collaboration_request, create_memory_message, create_task_message
 )
 from src.communication.message_bus import get_message_bus, MessageBus
 
@@ -165,21 +164,18 @@ class AgentCoordinator:
             # 创建对话智能体实例
             self.chat_agent = ChatAgent(
                 agent_id="chat_agent",
-                agent_type="chat",
                 config=self.config.get('chat_agent', {})
             )
             
             # 创建动作智能体实例
             self.action_agent = ActionAgent(
                 agent_id="action_agent",
-                agent_type="action",
                 config=self.config.get('action_agent', {})
             )
             
             # 创建记忆智能体实例
             self.memory_agent = MemoryAgent(
                 agent_id="memory_agent",
-                agent_type="memory",
                 config=self.config.get('memory_agent', {})
             )
             
@@ -285,10 +281,10 @@ class AgentCoordinator:
         
         # 1. ChatAgent 理解和分析用户输入
         chat_message = create_task_message(
-            sender="coordinator",
-            recipient="chat_agent",
-            task_type="analyze_input",
-            task_data={
+            sender_id="coordinator",
+            receiver_id="chat_agent",
+            task_description="analyze_input",
+            task_parameters={
                 "user_input": task.user_input,
                 "context": task.context
             },
@@ -306,10 +302,10 @@ class AgentCoordinator:
         if analysis_result.get('requires_action', False):
             # ActionAgent 执行动作
             action_message = create_task_message(
-                sender="coordinator",
-                recipient="action_agent",
-                task_type="execute_action",
-                task_data={
+                sender_id="coordinator",
+                receiver_id="action_agent",
+                task_description="execute_action",
+                task_parameters={
                     "action_plan": analysis_result.get('action_plan'),
                     "context": task.context
                 },
@@ -324,8 +320,8 @@ class AgentCoordinator:
         
         # 3. MemoryAgent 存储交互记忆
         memory_message = create_memory_message(
-            sender="coordinator",
-            recipient="memory_agent",
+            sender_id="coordinator",
+            receiver_id="memory_agent",
             operation="store",
             memory_data={
                 "user_input": task.user_input,
@@ -338,10 +334,10 @@ class AgentCoordinator:
         
         # 4. ChatAgent 生成最终响应
         response_message = create_task_message(
-            sender="coordinator",
-            recipient="chat_agent",
-            task_type="generate_response",
-            task_data={
+            sender_id="coordinator",
+            receiver_id="chat_agent",
+            task_description="generate_response",
+            task_parameters={
                 "analysis_result": analysis_result,
                 "context": task.context
             },
@@ -372,10 +368,10 @@ class AgentCoordinator:
             self._send_and_wait(
                 "chat_agent",
                 create_task_message(
-                    sender="coordinator",
-                    recipient="chat_agent",
-                    task_type="analyze_input",
-                    task_data={"user_input": task.user_input, "context": task.context},
+                    sender_id="coordinator",
+                    receiver_id="chat_agent",
+                    task_description="analyze_input",
+                    task_parameters={"user_input": task.user_input, "context": task.context},
                     priority=task.priority
                 ),
                 timeout=30
@@ -388,8 +384,8 @@ class AgentCoordinator:
             self._send_and_wait(
                 "memory_agent",
                 create_memory_message(
-                    sender="coordinator",
-                    recipient="memory_agent",
+                    sender_id="coordinator",
+                    receiver_id="memory_agent",
                     operation="retrieve",
                     memory_data={"query": task.user_input}
                 ),
@@ -430,8 +426,8 @@ class AgentCoordinator:
         memory_result = await self._send_and_wait(
             "memory_agent",
             create_memory_message(
-                sender="coordinator",
-                recipient="memory_agent",
+                sender_id="coordinator",
+                receiver_id="memory_agent",
                 operation="retrieve",
                 memory_data={"query": task.user_input}
             ),
@@ -445,10 +441,10 @@ class AgentCoordinator:
         chat_result = await self._send_and_wait(
             "chat_agent",
             create_task_message(
-                sender="coordinator",
-                recipient="chat_agent",
-                task_type="analyze_with_memory",
-                task_data=pipeline_data,
+                sender_id="coordinator",
+                receiver_id="chat_agent",
+                task_description="analyze_with_memory",
+                task_parameters=pipeline_data,
                 priority=task.priority
             ),
             timeout=30
@@ -462,10 +458,10 @@ class AgentCoordinator:
             action_result = await self._send_and_wait(
                 "action_agent",
                 create_task_message(
-                    sender="coordinator",
-                    recipient="action_agent",
-                    task_type="execute_pipeline_action",
-                    task_data=pipeline_data,
+                    sender_id="coordinator",
+                    receiver_id="action_agent",
+                    task_description="execute_pipeline_action",
+                    task_parameters=pipeline_data,
                     priority=task.priority
                 ),
                 timeout=60
@@ -478,10 +474,10 @@ class AgentCoordinator:
         final_result = await self._send_and_wait(
             "chat_agent",
             create_task_message(
-                sender="coordinator",
-                recipient="chat_agent",
-                task_type="generate_final_response",
-                task_data=pipeline_data,
+                sender_id="coordinator",
+                receiver_id="chat_agent",
+                task_description="generate_final_response",
+                task_parameters=pipeline_data,
                 priority=task.priority
             ),
             timeout=30
@@ -504,10 +500,10 @@ class AgentCoordinator:
         analysis_result = await self._send_and_wait(
             "chat_agent",
             create_task_message(
-                sender="coordinator",
-                recipient="chat_agent",
-                task_type="analyze_complexity",
-                task_data={
+                sender_id="coordinator",
+                receiver_id="chat_agent",
+                task_description="analyze_complexity",
+                task_parameters={
                     "user_input": task.user_input,
                     "context": task.context
                 },
@@ -540,10 +536,10 @@ class AgentCoordinator:
         result = await self._send_and_wait(
             "chat_agent",
             create_task_message(
-                sender="coordinator",
-                recipient="chat_agent",
-                task_type="simple_chat",
-                task_data={
+                sender_id="coordinator",
+                receiver_id="chat_agent",
+                task_description="simple_chat",
+                task_parameters={
                     "user_input": task.user_input,
                     "context": task.context
                 },

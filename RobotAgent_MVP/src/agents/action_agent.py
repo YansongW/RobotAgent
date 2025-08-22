@@ -158,7 +158,7 @@ class ActionAgent(BaseRobotAgent):
             agent_id: 智能体ID
             config: 配置参数
         """
-        super().__init__(agent_id, config)
+        super().__init__(agent_id, "action", config)
         
         # 任务管理
         self.active_tasks: Dict[str, TaskTree] = {}

@@ -428,9 +428,10 @@ class BaseRobotAgent(ABC):
         # 支持工具调用和协作消息的处理。
 
         self._message_handlers = {
-            MessageType.INSTRUCTION: self._handle_text_message,
-            MessageType.TASK: self._handle_task_message,
+            MessageType.TEXT: self._handle_text_message,  # 添加TEXT类型处理器
             MessageType.INSTRUCTION: self._handle_instruction_message,
+            MessageType.TASK: self._handle_task_message,
+            MessageType.TASK_REQUEST: self._handle_task_message,  # 添加TASK_REQUEST处理器
             MessageType.TOOL_CALL: self._handle_tool_call_message,
             MessageType.TOOL_RESULT: self._handle_tool_result_message,
             MessageType.STATUS: self._handle_status_message,
@@ -645,8 +646,8 @@ class BaseRobotAgent(ABC):
         # 发送消息给其他智能体
         # 支持多种消息类型，包括工具调用和协作请求。
         message = AgentMessage(
-            sender=self.agent_id,
-            recipient=recipient,
+            sender_id=self.agent_id,
+            receiver_id=recipient,
             content=content,
             message_type=message_type,
             metadata=metadata or {},
@@ -731,7 +732,7 @@ class BaseRobotAgent(ABC):
             
             # 发送错误响应
             await self.send_message(
-                recipient=message.sender,
+                recipient=message.sender_id,
                 content=f"处理消息时发生错误: {str(e)}",
                 message_type=MessageType.ERROR,
                 conversation_id=message.conversation_id
@@ -752,7 +753,7 @@ class BaseRobotAgent(ABC):
                 
                 # 发送响应
                 await self.send_message(
-                    recipient=message.sender,
+                    recipient=message.sender_id,
                     content=response,
                     message_type=MessageType.RESPONSE,
                     conversation_id=message.conversation_id
@@ -762,7 +763,7 @@ class BaseRobotAgent(ABC):
         else:
             # 简单的回显响应
             await self.send_message(
-                recipient=message.sender,
+                recipient=message.sender_id,
                 content=f"收到消息: {message.content}",
                 message_type=MessageType.RESPONSE,
                 conversation_id=message.conversation_id
@@ -792,7 +793,7 @@ class BaseRobotAgent(ABC):
                 
                 # 发送确认响应
                 await self.send_message(
-                    recipient=message.sender,
+                    recipient=message.sender_id,
                     content={
                         'status': 'accepted',
                         'task_id': task.task_id
@@ -831,7 +832,7 @@ class BaseRobotAgent(ABC):
             
             # 发送执行结果
             await self.send_message(
-                recipient=message.sender,
+                recipient=message.sender_id,
                 content=response,
                 message_type=MessageType.RESPONSE,
                 conversation_id=message.conversation_id
@@ -840,7 +841,7 @@ class BaseRobotAgent(ABC):
         except Exception as e:
             self.logger.error(f"处理指令消息失败: {e}")
             await self.send_message(
-                recipient=message.sender,
+                recipient=message.sender_id,
                 content=f"指令执行失败: {str(e)}",
                 message_type=MessageType.ERROR,
                 conversation_id=message.conversation_id
@@ -860,7 +861,7 @@ class BaseRobotAgent(ABC):
             
             # 发送工具执行结果
             await self.send_message(
-                recipient=message.sender,
+                recipient=message.sender_id,
                 content={
                     'tool_name': tool_name,
                     'result': result,
@@ -873,7 +874,7 @@ class BaseRobotAgent(ABC):
         except Exception as e:
             self.logger.error(f"工具调用失败: {e}")
             await self.send_message(
-                recipient=message.sender,
+                recipient=message.sender_id,
                 content={
                     'tool_name': tool_call_data.get('tool_name', 'unknown'),
                     'error': str(e),
@@ -912,7 +913,7 @@ class BaseRobotAgent(ABC):
         # 
         # 更新其他智能体的状态信息。
         status_data = message.content
-        sender_id = message.sender
+        sender_id = message.sender_id
         
         # 更新协作伙伴状态
         if sender_id not in self._collaboration_partners:
@@ -930,7 +931,7 @@ class BaseRobotAgent(ABC):
         # 
         # 记录错误信息，必要时采取恢复措施。
         error_info = message.content
-        sender_id = message.sender
+        sender_id = message.sender_id
         
         self.logger.error(f"收到来自 {sender_id} 的错误消息: {error_info}")
         
@@ -948,7 +949,7 @@ class BaseRobotAgent(ABC):
         # 响应心跳检测，维护连接状态。
         # 发送心跳响应
         await self.send_message(
-            recipient=message.sender,
+            recipient=message.sender_id,
             content={'status': 'alive', 'timestamp': time.time()},
             message_type=MessageType.HEARTBEAT
         )
@@ -1223,13 +1224,13 @@ class BaseRobotAgent(ABC):
         accepted = response_data.get('accepted', False)
         
         if accepted:
-            self.logger.info(f"协作请求被 {message.sender} 接受")
+            self.logger.info(f"协作请求被 {message.sender_id} 接受")
             # 处理协作结果
             result = response_data.get('result')
             if result:
                 await self._process_collaboration_result(result)
         else:
-            self.logger.info(f"协作请求被 {message.sender} 拒绝")
+            self.logger.info(f"协作请求被 {message.sender_id} 拒绝")
     
     async def _should_accept_collaboration(self, collaboration_data: Dict[str, Any]) -> bool:
         """
@@ -1273,7 +1274,7 @@ class BaseRobotAgent(ABC):
         
         # 发送确认响应
         await self.send_message(
-            recipient=message.sender,
+            recipient=message.sender_id,
             content="任务完成确认",
             message_type=MessageType.RESPONSE,
             conversation_id=message.conversation_id

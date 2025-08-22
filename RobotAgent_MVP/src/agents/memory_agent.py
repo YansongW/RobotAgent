@@ -32,9 +32,9 @@ from src.communication.protocols import (
 from src.communication.message_bus import get_message_bus
 
 # 导入记忆管理组件
-from ..memory.graph_storage import GraphStorage
-from ..memory.knowledge_retriever import KnowledgeRetriever, RetrievalMode
-from ..memory import embedding_model
+from src.memory.graph_storage import GraphStorage
+from src.memory.knowledge_retriever import KnowledgeRetriever, RetrievalMode
+from src.memory import embedding_model
 
 # 导入CAMEL框架组件
 try:
@@ -176,7 +176,7 @@ class MemoryAgent(BaseRobotAgent):
             agent_id: 智能体ID
             config: 配置参数
         """
-        super().__init__(agent_id, config)
+        super().__init__(agent_id, "memory", config)
         
         # 记忆存储
         self.working_memory: Dict[str, MemoryItem] = {}  # 工作记忆（容量有限）
@@ -438,13 +438,51 @@ class MemoryAgent(BaseRobotAgent):
         return f"mem_{hash_obj.hexdigest()[:12]}"
 
     async def _generate_embedding(self, content: Any) -> List[float]:
-        """生成内容的向量嵌入（简化版本）"""
-        # 这里是简化的嵌入生成，实际应使用专业的嵌入模型
+        """生成内容的向量嵌入
+        
+        使用专业的embedding模型生成高质量向量嵌入
+        
+        Args:
+            content: 需要向量化的内容
+            
+        Returns:
+            List[float]: 向量嵌入
+        """
+        try:
+            # 将内容转换为字符串
+            content_str = str(content)
+            
+            # 使用embedding模型生成向量
+            embedding = embedding_model.encode(content_str)
+            
+            # 确保返回的是列表格式
+            if isinstance(embedding, np.ndarray):
+                embedding = embedding.tolist()
+            
+            self.logger.debug(f"生成向量嵌入，维度: {len(embedding)}")
+            return embedding
+            
+        except Exception as e:
+            self.logger.error(f"向量嵌入生成失败: {str(e)}")
+            # 使用简单的后备方案
+            return self._generate_fallback_embedding(content)
+    
+    def _generate_fallback_embedding(self, content: Any) -> List[float]:
+        """后备向量嵌入生成方法
+        
+        当专业embedding模型失败时使用的简单向量化方法
+        
+        Args:
+            content: 需要向量化的内容
+            
+        Returns:
+            List[float]: 简单的向量嵌入
+        """
         content_str = str(content).lower()
         
-        # 简单的词频向量（实际应使用BERT、OpenAI等模型）
+        # 简单的词频向量
         words = content_str.split()
-        vocab_size = 1000  # 简化的词汇表大小
+        vocab_size = 384  # 与多模态模型的后备维度保持一致
         embedding = [0.0] * vocab_size
         
         for word in words:
@@ -915,11 +953,142 @@ class MemoryAgent(BaseRobotAgent):
             self.logger.error(f"知识提取失败: {str(e)}")
     
     async def _extract_entities_advanced(self, content: str) -> List[Dict[str, Any]]:
-        """高级实体提取"""
+        """高级实体提取
+        
+        使用改进的NLP技术提取实体，包括命名实体识别和关键词提取
+        
+        Args:
+            content: 文本内容
+            
+        Returns:
+            List[Dict[str, Any]]: 提取的实体列表
+        """
         entities = []
         
-        # 简化的实体提取逻辑（实际应使用NER模型）
+        try:
+            # 基本文本预处理
+            words = content.split()
+            sentences = content.split('.')
+            
+            # 1. 命名实体识别（简化版）
+            named_entities = self._extract_named_entities(content)
+            entities.extend(named_entities)
+            
+            # 2. 关键词提取
+            keywords = self._extract_keywords(content)
+            entities.extend(keywords)
+            
+            # 3. 概念提取
+            concepts = self._extract_concepts(content)
+            entities.extend(concepts)
+            
+            # 去重和排序
+            entities = self._deduplicate_entities(entities)
+            entities = sorted(entities, key=lambda x: x["importance"], reverse=True)
+            
+            return entities[:15]  # 限制数量
+            
+        except Exception as e:
+            self.logger.error(f"实体提取失败: {str(e)}")
+            return self._fallback_entity_extraction(content)
+    
+    def _extract_named_entities(self, content: str) -> List[Dict[str, Any]]:
+        """提取命名实体（人名、地名、组织名等）"""
+        entities = []
         words = content.split()
+        
+        # 简化的命名实体识别规则
+        for i, word in enumerate(words):
+            # 检测可能的人名（首字母大写）
+            if word.istitle() and len(word) > 2:
+                entity = {
+                    "id": f"person_{hash(word) % 10000}",
+                    "type": "person",
+                    "properties": {
+                        "name": word,
+                        "context": " ".join(words[max(0, i-2):i+3]),
+                        "position": i
+                    },
+                    "importance": 0.8
+                }
+                entities.append(entity)
+        
+        return entities
+    
+    def _extract_keywords(self, content: str) -> List[Dict[str, Any]]:
+        """提取关键词"""
+        entities = []
+        words = content.lower().split()
+        
+        # 词频统计
+        word_freq = {}
+        for word in words:
+            if len(word) > 3 and word.isalpha():
+                word_freq[word] = word_freq.get(word, 0) + 1
+        
+        # 选择高频词作为关键词
+        for word, freq in word_freq.items():
+            if freq > 1:  # 出现多次的词
+                entity = {
+                    "id": f"keyword_{hash(word) % 10000}",
+                    "type": "keyword",
+                    "properties": {
+                        "name": word,
+                        "frequency": freq,
+                        "tf_score": freq / len(words)
+                    },
+                    "importance": min(1.0, freq / 5.0)
+                }
+                entities.append(entity)
+        
+        return entities
+    
+    def _extract_concepts(self, content: str) -> List[Dict[str, Any]]:
+        """提取概念性实体"""
+        entities = []
+        
+        # 技术术语模式
+        tech_patterns = [
+            r'\b[A-Z]{2,}\b',  # 缩写词
+            r'\b\w+_\w+\b',    # 下划线连接的词
+            r'\b\w+\.\w+\b',   # 点连接的词（如文件名）
+        ]
+        
+        import re
+        for pattern in tech_patterns:
+            matches = re.findall(pattern, content)
+            for match in matches:
+                entity = {
+                    "id": f"concept_{hash(match) % 10000}",
+                    "type": "concept",
+                    "properties": {
+                        "name": match,
+                        "pattern": pattern
+                    },
+                    "importance": 0.6
+                }
+                entities.append(entity)
+        
+        return entities
+    
+    def _deduplicate_entities(self, entities: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """去重实体"""
+        seen_names = set()
+        unique_entities = []
+        
+        for entity in entities:
+            name = entity["properties"].get("name", "").lower()
+            if name not in seen_names:
+                seen_names.add(name)
+                unique_entities.append(entity)
+        
+        return unique_entities
+    
+    def _fallback_entity_extraction(self, content: str) -> List[Dict[str, Any]]:
+        """后备实体提取方法"""
+        entities = []
+        words = content.split()
+        
         for i, word in enumerate(words):
             if len(word) > 3 and word.isalpha():
                 entity = {
@@ -934,23 +1103,175 @@ class MemoryAgent(BaseRobotAgent):
                 }
                 entities.append(entity)
         
-        return entities[:10]  # 限制数量
+        return entities[:10]
     
     async def _extract_relationships_advanced(self, content: str, entities: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """高级关系提取"""
+        """高级关系提取
+        
+        使用改进的NLP技术提取实体间的语义关系
+        
+        Args:
+            content: 文本内容
+            entities: 已提取的实体列表
+            
+        Returns:
+            List[Dict[str, Any]]: 提取的关系列表
+        """
         relationships = []
         
-        # 简化的关系提取逻辑
+        try:
+            # 1. 基于距离的关系提取
+            proximity_relations = self._extract_proximity_relationships(content, entities)
+            relationships.extend(proximity_relations)
+            
+            # 2. 基于语法模式的关系提取
+            pattern_relations = self._extract_pattern_relationships(content, entities)
+            relationships.extend(pattern_relations)
+            
+            # 3. 基于共现的关系提取
+            cooccurrence_relations = self._extract_cooccurrence_relationships(content, entities)
+            relationships.extend(cooccurrence_relations)
+            
+            # 去重和排序
+            relationships = self._deduplicate_relationships(relationships)
+            relationships = sorted(relationships, key=lambda x: x.get("confidence", 0.5), reverse=True)
+            
+            return relationships[:25]  # 限制数量
+            
+        except Exception as e:
+            self.logger.error(f"关系提取失败: {str(e)}")
+            return self._fallback_relationship_extraction(content, entities)
+    
+    def _extract_proximity_relationships(self, content: str, entities: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """基于距离的关系提取"""
+        relationships = []
+        
+        for i, entity1 in enumerate(entities):
+            for j, entity2 in enumerate(entities[i+1:], i+1):
+                # 检查实体是否在相近位置
+                pos1 = entity1["properties"].get("position", 0)
+                pos2 = entity2["properties"].get("position", 0)
+                
+                if abs(pos1 - pos2) <= 5:  # 距离阈值
+                    relationship = {
+                        "id": f"rel_{hash(entity1['id'] + '_' + entity2['id']) % 10000}",
+                        "source": entity1["id"],
+                        "target": entity2["id"],
+                        "type": "proximity",
+                        "properties": {
+                            "distance": abs(pos1 - pos2),
+                            "context": content[min(pos1, pos2)*10:max(pos1, pos2)*10+50],
+                            "relation_type": "spatial_proximity"
+                        },
+                        "confidence": max(0.1, 1.0 - abs(pos1 - pos2) / 10.0)
+                    }
+                    relationships.append(relationship)
+        
+        return relationships
+    
+    def _extract_pattern_relationships(self, content: str, entities: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """基于语法模式的关系提取"""
+        relationships = []
+        
+        # 定义关系模式
+        relation_patterns = [
+            (r'(\w+)\s+is\s+a\s+(\w+)', 'is_a'),
+            (r'(\w+)\s+has\s+(\w+)', 'has'),
+            (r'(\w+)\s+uses\s+(\w+)', 'uses'),
+            (r'(\w+)\s+contains\s+(\w+)', 'contains'),
+            (r'(\w+)\s+belongs\s+to\s+(\w+)', 'belongs_to'),
+            (r'(\w+)\s+和\s+(\w+)', 'related_to'),
+            (r'(\w+)\s+的\s+(\w+)', 'has_attribute'),
+        ]
+        
+        import re
+        entity_names = {entity["properties"].get("name", "").lower(): entity["id"] for entity in entities}
+        
+        for pattern, relation_type in relation_patterns:
+            matches = re.finditer(pattern, content, re.IGNORECASE)
+            for match in matches:
+                source_name = match.group(1).lower()
+                target_name = match.group(2).lower()
+                
+                if source_name in entity_names and target_name in entity_names:
+                    relationship = {
+                        "id": f"rel_{hash(f'{source_name}_{target_name}_{relation_type}') % 10000}",
+                        "source": entity_names[source_name],
+                        "target": entity_names[target_name],
+                        "type": relation_type,
+                        "properties": {
+                            "pattern": pattern,
+                            "matched_text": match.group(0),
+                            "relation_type": "semantic"
+                        },
+                        "confidence": 0.8
+                    }
+                    relationships.append(relationship)
+        
+        return relationships
+    
+    def _extract_cooccurrence_relationships(self, content: str, entities: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """基于共现的关系提取"""
+        relationships = []
+        sentences = content.split('.')
+        
+        for sentence in sentences:
+            sentence_entities = []
+            for entity in entities:
+                entity_name = entity["properties"].get("name", "")
+                if entity_name.lower() in sentence.lower():
+                    sentence_entities.append(entity)
+            
+            # 为同一句子中的实体创建共现关系
+            for i, entity1 in enumerate(sentence_entities):
+                for j, entity2 in enumerate(sentence_entities[i+1:], i+1):
+                    relationship = {
+                        "id": f"rel_{hash(entity1['id'] + '_' + entity2['id'] + '_cooccur') % 10000}",
+                        "source": entity1["id"],
+                        "target": entity2["id"],
+                        "type": "co_occurrence",
+                        "properties": {
+                            "sentence": sentence.strip(),
+                            "relation_type": "cooccurrence"
+                        },
+                        "confidence": 0.6
+                    }
+                    relationships.append(relationship)
+        
+        return relationships
+    
+    def _deduplicate_relationships(self, relationships: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """去重关系"""
+        seen_pairs = set()
+        unique_relationships = []
+        
+        for rel in relationships:
+            # 创建关系对的标识符（考虑双向性）
+            pair1 = (rel["source"], rel["target"], rel["type"])
+            pair2 = (rel["target"], rel["source"], rel["type"])
+            
+            if pair1 not in seen_pairs and pair2 not in seen_pairs:
+                seen_pairs.add(pair1)
+                unique_relationships.append(rel)
+        
+        return unique_relationships
+    
+    def _fallback_relationship_extraction(self, content: str, entities: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """后备关系提取方法"""
+        relationships = []
+        
         for i in range(len(entities) - 1):
             for j in range(i + 1, min(i + 3, len(entities))):
                 relationship = {
+                    "id": f"rel_{hash(entities[i]['id'] + '_' + entities[j]['id']) % 10000}",
                     "source": entities[i]["id"],
                     "target": entities[j]["id"],
                     "type": "co_occurrence",
                     "properties": {
                         "distance": j - i,
                         "context": content[:200]
-                    }
+                    },
+                    "confidence": 0.3
                 }
                 relationships.append(relationship)
         

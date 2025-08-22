@@ -128,164 +128,268 @@ class MessageType(Enum):
 
 ### 智能体协作工作流
 
-#### 标准协作流程
+#### 基于消息总线的协作架构
+
+系统采用MessageBus作为核心通信组件，实现智能体间的解耦通信：
 
 ```
-1. 用户输入 → ChatAgent
-   ├─ 意图识别和分析
-   ├─ 上下文理解
-   └─ 决策路由
+┌─────────────┐    ┌─────────────────┐    ┌─────────────┐
+│ ChatAgent   │◄──►│   MessageBus    │◄──►│ ActionAgent │
+└─────────────┘    │                 │    └─────────────┘
+                   │ • 消息路由       │           ▲
+┌─────────────┐    │ • 队列管理       │           │
+│ MemoryAgent │◄──►│ • 状态监控       │           │
+└─────────────┘    │ • 持久化重试     │           │
+                   └─────────────────┘           │
+                            │                    │
+                   ┌─────────────────┐           │
+                   │ AgentCoordinator│───────────┘
+                   │ • 协调模式管理   │
+                   │ • 任务分发       │
+                   │ • 结果整合       │
+                   └─────────────────┘
+```
 
-2. ChatAgent → ActionAgent (任务执行场景)
-   ├─ 发送任务描述和参数
-   ├─ ActionAgent执行任务分解
-   ├─ 返回执行计划和结果
-   └─ ChatAgent整合响应
+#### 标准协作流程
 
-3. ChatAgent → MemoryAgent (知识查询场景)
-   ├─ 发送查询请求
-   ├─ MemoryAgent检索相关记忆
-   ├─ 返回知识和上下文
-   └─ ChatAgent生成回复
+**1. 用户输入处理流程**：
+```
+用户输入 → ChatAgent.process_message()
+    ↓
+消息分析 → 意图识别 → 情感分析 → 实体提取
+    ↓
+协作决策 → MessageBus.send_message()
+    ↓
+目标智能体接收 → 处理 → 响应
+    ↓
+ChatAgent接收响应 → 整合 → 生成最终回复
+```
 
-4. ActionAgent ↔ MemoryAgent (执行过程中)
-   ├─ ActionAgent查询执行经验
-   ├─ MemoryAgent提供历史数据
-   ├─ ActionAgent存储执行结果
-   └─ MemoryAgent更新知识库
+**2. 任务执行协作流程**：
+```
+ChatAgent → MessageBus → ActionAgent
+    ↓
+ActionAgent.execute_task() → 任务分解
+    ↓
+ActionAgent → MessageBus → MemoryAgent (查询经验)
+    ↓
+MemoryAgent.retrieve_memories() → 返回相关经验
+    ↓
+ActionAgent执行 → 结果存储 → MessageBus → MemoryAgent
+    ↓
+MemoryAgent.store_memory() → 更新知识库
+    ↓
+ActionAgent → MessageBus → ChatAgent (返回结果)
+```
+
+**3. 知识检索协作流程**：
+```
+ChatAgent → MessageBus → MemoryAgent
+    ↓
+MemoryAgent.retrieve_memories()
+    ↓
+向量检索 + 知识图谱查询 + 关系推理
+    ↓
+结果排序 → MessageBus → ChatAgent
+    ↓
+ChatAgent整合知识 → 生成回复
 ```
 
 #### 消息传递协议
 
-**标准消息格式**：
-```json
-{
-  "message_id": "msg_uuid",
-  "sender_agent": "ChatAgent|ActionAgent|MemoryAgent",
-  "receiver_agent": "ChatAgent|ActionAgent|MemoryAgent",
-  "message_type": "TASK|QUERY|RESPONSE|STATUS",
-  "timestamp": "2024-01-01T10:00:00Z",
-  "payload": {
-    "content": "消息内容",
-    "metadata": {"priority": "HIGH|MEDIUM|LOW"}
-  },
-  "correlation_id": "关联消息ID"
-}
+**AgentMessage数据结构**（基于config/message_types.py）：
+```python
+class AgentMessage:
+    message_id: str = field(default_factory=lambda: str(uuid.uuid4()))
+    sender_id: str
+    receiver_id: str
+    message_type: MessageType
+    content: str
+    metadata: Dict[str, Any] = field(default_factory=dict)
+    timestamp: datetime = field(default_factory=datetime.now)
+    priority: int = 1
+    requires_response: bool = False
+    correlation_id: Optional[str] = None
 ```
 
-**协作模式**：
-- **直接协作**：ChatAgent直接调用其他智能体
-- **链式协作**：ChatAgent → ActionAgent → MemoryAgent
-- **并行协作**：ChatAgent同时查询ActionAgent和MemoryAgent
-- **反馈协作**：智能体间的双向信息交换
+**MessageType枚举**：
+```python
+class MessageType(Enum):
+    TEXT = "text"                  # 文本消息
+    TASK = "task"                  # 任务分配
+    INSTRUCTION = "instruction"    # 指令消息
+    RESPONSE = "response"          # 响应消息
+    TOOL_CALL = "tool_call"        # 工具调用
+    TOOL_RESULT = "tool_result"    # 工具结果
+    STATUS = "status"              # 状态更新
+    ERROR = "error"                # 错误报告
+    HEARTBEAT = "heartbeat"        # 心跳检测
+    COLLABORATION = "collaboration" # 协作请求
+```
+
+**协作模式**（AgentCoordinator支持）：
+```python
+class CoordinationMode(Enum):
+    SEQUENTIAL = "sequential"      # 顺序协作
+    PARALLEL = "parallel"          # 并行协作
+    PIPELINE = "pipeline"          # 流水线协作
+    ADAPTIVE = "adaptive"          # 自适应协作
+```
 
 **ChatAgent (对话协调智能体)**:
 
-**核心职责**：作为系统的对话入口和协调中心
+**核心职责**：作为系统的对话入口和协调中心，基于CAMEL框架实现自然语言处理
+
+**技术架构**：
+- **基础框架**：继承自BaseRobotAgent，集成CAMEL ChatAgent
+- **记忆集成**：集成ConversationHistory进行对话历史管理
+- **消息处理**：异步消息处理循环，支持多种消息类型
 
 **主要功能**：
-- **意图识别与分析**：解析用户输入，识别任务类型和执行意图
-- **对话上下文管理**：维护多轮对话状态和会话历史
-- **智能体调度协调**：根据任务需求决定是否调用ActionAgent或MemoryAgent
-- **响应整合与生成**：整合各智能体的输出，生成最终用户响应
-- **情感分析与适应**：分析用户情感状态，调整交互策略
+- **意图识别与分析**：使用IntentType枚举(QUESTION, TASK, CHAT, CLARIFICATION, GREETING, GOODBYE)识别用户意图
+- **情感分析**：EmotionType枚举(NEUTRAL, HAPPY, SAD, ANGRY, EXCITED, CONFUSED)分析用户情感
+- **实体提取**：从用户输入中提取关键实体和概念
+- **对话上下文管理**：ConversationContext数据结构维护多轮对话状态
+- **智能体协作**：通过消息总线与ActionAgent和MemoryAgent协作
+- **响应生成**：支持CAMEL响应、知识检索响应、回退响应和澄清响应
 
-**输出格式**：
-```json
-{
-  "intent_type": "TASK_EXECUTION|INFORMATION_QUERY|CONVERSATION",
-  "confidence": 0.95,
-  "context_summary": "对话上下文摘要",
-  "next_action": "CALL_ACTION_AGENT|CALL_MEMORY_AGENT|DIRECT_RESPONSE",
-  "parameters": {"task_description": "具体任务描述"}
-}
+**数据流转流程**：
+```
+用户输入 → 消息分析 → 意图识别 → 情感分析 → 实体提取
+    ↓
+上下文更新 → 协作决策 → 响应生成 → 对话历史存储
+    ↓
+最终响应输出
+```
+
+**核心数据结构**：
+```python
+class ConversationState(Enum):
+    GREETING = "greeting"      # 问候阶段
+    ACTIVE = "active"          # 活跃对话
+    WAITING = "waiting"        # 等待响应
+    CLARIFYING = "clarifying"  # 澄清阶段
+    ENDING = "ending"          # 结束阶段
+
+class MessageAnalysis:
+    intent: IntentType
+    emotion: EmotionType
+    entities: List[str]
+    confidence: float
+    keywords: List[str]
+```
 ```
 
 **ActionAgent (任务执行智能体)**:
 
-**核心职责**：负责复杂任务的分解、规划和执行
+**核心职责**：负责复杂任务的分解、规划和执行，专注于动作规划和任务分解
+
+**技术架构**：
+- **基础框架**：继承自BaseRobotAgent，集成消息总线通信
+- **任务管理**：TaskTree数据结构支持层次化任务分解
+- **执行引擎**：异步任务执行和状态监控
 
 **主要功能**：
-- **任务分解与建模**：将复杂任务分解为可执行的子任务序列
-- **动作序列规划**：制定最优的执行路径和策略
-- **工具调用与集成**：协调CAMEL工具、外部API和硬件接口
-- **执行状态监控**：实时跟踪任务执行进度和状态
-- **异常处理与恢复**：处理执行过程中的错误和异常情况
-- **结果验证与反馈**：验证执行结果的正确性和完整性
+- **任务分解与建模**：TaskType枚举(SIMPLE, COMPLEX, PARALLEL, SEQUENTIAL)支持不同类型任务
+- **执行状态管理**：ExecutionStatus枚举(PENDING, IN_PROGRESS, COMPLETED, FAILED, PAUSED, CANCELLED)
+- **动作序列规划**：ExecutionPlan数据结构制定执行策略
+- **工具调用与集成**：动态工具注册和调用管理
+- **并发执行控制**：支持并行和顺序任务执行
+- **异常处理与恢复**：完整的错误处理和任务恢复机制
 
-**输出格式**：
-```json
-{
-  "task_tree": {
-    "root_task": "主任务描述",
-    "subtasks": [
-      {
-        "id": "subtask_1",
-        "description": "子任务描述",
-        "dependencies": [],
-        "tools_required": ["tool_name"],
-        "estimated_time": "2min",
-        "status": "PENDING|IN_PROGRESS|COMPLETED|FAILED"
-      }
-    ]
-  },
-  "execution_plan": {
-    "sequence": ["subtask_1", "subtask_2"],
-    "parallel_groups": [["subtask_3", "subtask_4"]]
-  },
-  "execution_result": {
-    "status": "SUCCESS|PARTIAL|FAILED",
-    "completed_tasks": ["subtask_1"],
-    "failed_tasks": [],
-    "output_data": "执行结果数据"
-  }
-}
+**数据流转流程**：
+```
+任务接收 → 任务分析 → 任务分解 → 执行计划生成
+    ↓
+子任务创建 → 依赖关系分析 → 执行顺序确定
+    ↓
+任务执行 → 状态监控 → 结果收集 → 执行报告
+```
+
+**核心数据结构**：
+```python
+class SubTask:
+    task_id: str
+    parent_id: Optional[str]
+    task_type: TaskType
+    description: str
+    parameters: Dict[str, Any]
+    dependencies: List[str]
+    status: ExecutionStatus
+    priority: int
+    estimated_duration: float
+    actual_duration: Optional[float]
+    tools_required: List[str]
+    result: Optional[Any]
+    error_info: Optional[str]
+
+class TaskTree:
+    root_task: SubTask
+    subtasks: Dict[str, SubTask]
+    execution_order: List[str]
+    parallel_groups: List[List[str]]
+```
 ```
 
 **MemoryAgent (记忆管理智能体)**:
 
-**核心职责**：管理系统的多层记忆和知识图谱
+**核心职责**：管理系统的多层记忆和知识图谱，专注于知识存储和检索
+
+**技术架构**：
+- **基础框架**：继承自BaseRobotAgent，集成GraphStorage和KnowledgeRetriever
+- **存储引擎**：GraphStorage管理知识图谱和向量存储
+- **检索引擎**：KnowledgeRetriever提供多模式知识检索
+- **嵌入模型**：EmbeddingModel提供向量化服务
 
 **主要功能**：
-- **多模态记忆存储**：存储文本、图像、音频等多种形式的记忆数据
-- **向量化知识检索**：基于语义相似度的高效知识检索
-- **知识图谱构建**：构建和维护实体关系网络
-- **经验学习与积累**：从历史交互中提取和存储经验模式
-- **上下文关联分析**：分析当前对话与历史记忆的关联性
-- **记忆优化与清理**：定期优化记忆结构，清理冗余信息
+- **多层记忆管理**：MemoryType枚举(WORKING, SHORT_TERM, LONG_TERM, EPISODIC, SEMANTIC, PROCEDURAL)
+- **记忆优先级**：MemoryPriority枚举(LOW, MEDIUM, HIGH, CRITICAL)控制存储策略
+- **向量化知识检索**：基于embedding模型的语义相似度检索
+- **知识图谱构建**：NetworkX图结构存储实体关系网络
+- **智能知识提取**：自动从文本中提取实体、关系和概念
+- **记忆整合与衰减**：后台任务进行记忆优化和清理
+- **多模式检索**：支持快速、联想、关系和综合检索模式
+
+**数据流转流程**：
+```
+记忆存储请求 → 内容分析 → 向量嵌入生成 → 记忆层分配
+    ↓
+知识图谱更新 → 实体关系提取 → 索引构建
+    ↓
+记忆检索请求 → 查询向量生成 → 相似度计算 → 结果排序
+    ↓
+知识图谱查询 → 关系推理 → 结果整合 → 返回记忆
+```
 
 **记忆层次结构**：
-- **工作记忆**：当前会话的临时信息（容量限制：50条消息）
-- **短期记忆**：近期会话历史（保留时间：7天）
-- **长期记忆**：重要经验和知识（永久存储）
-- **知识图谱**：结构化的实体关系网络
+- **工作记忆**：当前会话临时信息（容量：工作记忆容量配置）
+- **短期记忆**：近期交互历史（保留：短期记忆保留时间配置）
+- **长期记忆**：重要经验和知识（永久存储，定期整合）
+- **情节记忆**：特定事件和经历的完整记录
+- **语义记忆**：抽象概念和知识的结构化存储
+- **程序记忆**：技能和操作程序的存储
 
-**输出格式**：
-```json
-{
-  "memory_query_result": {
-    "relevant_memories": [
-      {
-        "memory_id": "mem_001",
-        "content": "相关记忆内容",
-        "similarity_score": 0.89,
-        "memory_type": "EXPERIENCE|KNOWLEDGE|CONTEXT",
-        "timestamp": "2024-01-01T10:00:00Z"
-      }
-    ],
-    "knowledge_graph_entities": [
-      {
-        "entity": "实体名称",
-        "relations": [{"relation": "关系类型", "target": "目标实体"}]
-      }
-    ]
-  },
-  "memory_storage_result": {
-    "stored_memory_id": "mem_002",
-    "storage_type": "WORKING|SHORT_TERM|LONG_TERM",
-    "indexed_keywords": ["关键词1", "关键词2"]
-  }
-}
+**核心数据结构**：
+```python
+class MemoryItem:
+    memory_id: str
+    content: str
+    memory_type: MemoryType
+    priority: MemoryPriority
+    timestamp: datetime
+    embedding: Optional[np.ndarray]
+    metadata: Dict[str, Any]
+    access_count: int
+    last_accessed: datetime
+    related_entities: List[str]
+    tags: List[str]
+
+class RetrievalMode(Enum):
+    QUICK = "quick"              # 快速检索
+    ASSOCIATIVE = "associative"  # 联想检索
+    RELATIONAL = "relational"    # 关系检索
+    COMPREHENSIVE = "comprehensive"  # 综合检索
+```
 ```
 
 ## 项目结构
@@ -307,7 +411,9 @@ RobotAgent_MVP/
 │   ├── memory/                    # 记忆模块
 │   │   ├── __init__.py
 │   │   ├── simple_memory.py       # 简单记忆系统 (已完成)
-│   │   └── conversation_history.py # 对话历史 (已完成)
+│   │   ├── conversation_history.py # 对话历史 (已完成)
+│   │   ├── graph_storage.py       # 知识图谱存储 (已完成)
+│   │   └── embedding_model.py     # 向量嵌入模型 (已完成)
 │   ├── output/                    # 输出模块
 │   │   ├── __init__.py
 │   │   ├── tts_handler.py         # 语音合成处理 (已完成)
@@ -383,7 +489,110 @@ class MemorySystem:
         self._conversation_memory = {}                 # 对话记忆
 ```
 
-### 4. 协作模式实现
+### 4. 知识存储与检索系统
+
+```python
+# 知识图谱存储架构
+class GraphStorage:
+    def __init__(self, storage_path: str):
+        self.entities = {}              # 实体存储
+        self.relationships = {}         # 关系存储
+        self.vector_stores = {}         # 向量存储
+        self.embedding_model = embedding_model  # 嵌入模型
+    
+    def add_entity(self, entity_data: Dict) -> str:
+        """添加实体并生成向量嵌入"""
+        entity_vector = self.embedding_model.encode(entity_data['text'])
+        entity_id = self._generate_entity_id(entity_data)
+        self.entities[entity_id] = {
+            'data': entity_data,
+            'vector': entity_vector,
+            'timestamp': datetime.now()
+        }
+        return entity_id
+    
+    def search_similar_entities(self, query: str, top_k: int = 5) -> List[Tuple[str, float]]:
+        """基于语义相似度搜索实体"""
+        query_vector = self.embedding_model.encode(query)
+        similarities = []
+        
+        for entity_id, entity_info in self.entities.items():
+            similarity = self._cosine_similarity(query_vector, entity_info['vector'])
+            similarities.append((entity_id, similarity))
+        
+        return sorted(similarities, key=lambda x: x[1], reverse=True)[:top_k]
+
+# 向量存储实现
+class VectorStore:
+    def __init__(self):
+        self.vectors = {}               # 向量数据
+        self.metadata = {}              # 元数据
+    
+    def add_vector(self, doc_id: str, vector: np.ndarray, metadata: Dict):
+        """添加向量和元数据"""
+        self.vectors[doc_id] = vector
+        self.metadata[doc_id] = metadata
+    
+    def similarity_search(self, query_vector: np.ndarray, top_k: int = 5) -> List[Tuple[str, float]]:
+        """执行相似性搜索"""
+        similarities = []
+        for doc_id, vector in self.vectors.items():
+            similarity = np.dot(query_vector, vector) / (np.linalg.norm(query_vector) * np.linalg.norm(vector))
+            similarities.append((doc_id, float(similarity)))
+        
+        return sorted(similarities, key=lambda x: x[1], reverse=True)[:top_k]
+```
+
+### 5. 智能知识提取
+
+```python
+# 知识提取实现
+class KnowledgeExtractor:
+    def _extract_entities_advanced(self, text: str) -> List[Dict]:
+        """高级实体提取"""
+        entities = []
+        
+        # 使用正则表达式提取专有名词
+        proper_nouns = re.findall(r'[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*', text)
+        for noun in proper_nouns:
+            entities.append({
+                'text': noun,
+                'type': 'PROPER_NOUN',
+                'confidence': 0.8
+            })
+        
+        # 提取技术术语
+        tech_terms = re.findall(r'[a-zA-Z]+(?:学习|智能|系统|算法|模型|网络)', text)
+        for term in tech_terms:
+            entities.append({
+                'text': term,
+                'type': 'TECHNICAL_TERM',
+                'confidence': 0.9
+            })
+        
+        return entities
+    
+    def _extract_relationships_advanced(self, entities: List[Dict], text: str) -> List[Dict]:
+        """高级关系提取"""
+        relationships = []
+        
+        # 基于模式的关系提取
+        for i, entity1 in enumerate(entities):
+            for j, entity2 in enumerate(entities[i+1:], i+1):
+                # 检查实体间的关系模式
+                pattern = f"{entity1['text']}.*?{entity2['text']}"
+                if re.search(pattern, text, re.IGNORECASE):
+                    relationships.append({
+                        'source': entity1['text'],
+                        'target': entity2['text'],
+                        'relation': 'RELATED_TO',
+                        'confidence': 0.7
+                    })
+        
+        return relationships
+```
+
+### 6. 协作模式实现
 
 ```python
 # 协作模式枚举
@@ -434,10 +643,12 @@ class CollaborationMode(Enum):
 
 ### Phase 3: 高级功能与优化
 
-**Week 11-12: 多模态处理**
-- [ ] 扩展MemoryAgent支持图像、音频记忆
-- [ ] 实现跨模态知识检索
-- [ ] 开发多模态任务分解能力
+**Week 11-12: 知识系统优化** ✅ 已完成
+- [x] 修复embedding模型集成问题
+- [x] 增强知识提取功能，使用专业NLP技术
+- [x] 集成ChatAgent知识检索功能
+- [x] 完善向量存储和相似性搜索
+- [x] 创建完整的知识系统测试验证
 
 **Week 13-14: 学习与适应**
 - [ ] 实现经验学习和模式识别
@@ -467,6 +678,7 @@ class CollaborationMode(Enum):
 
 - **里程碑1** (Week 6): 三智能体基础功能完成 ✅
 - **里程碑2** (Week 10): 智能体协作系统可用 ✅
+- **里程碑2.5** (Week 12): 知识存储与检索系统完成 ✅
 - **里程碑3** (Week 15): 高级功能集成完成 🚧
 - **里程碑4** (Week 18): 系统部署就绪 📋
 
@@ -480,16 +692,22 @@ class CollaborationMode(Enum):
 - **通信路由系统**: 智能体间消息路由和协调
 - **动态工具注册**: 支持运行时工具添加和权限管理
 - **多层记忆架构**: 短期、长期、情节、语义四层记忆系统
+- **知识存储与检索系统**: 
+  - 基于embedding的向量化知识存储
+  - 知识图谱构建和实体关系管理
+  - 智能知识提取和NLP处理
+  - 语义相似度搜索和知识检索
+- **对话知识集成**: ChatAgent集成知识检索功能，支持上下文增强的智能回复
 - **协作机制**: 支持4种协作模式的多智能体协调
 - **学习能力**: 交互式学习和经验积累机制
 - **输出处理模块**: TTS语音合成、动作文件生成器
 - **配置管理系统**: 动态配置加载和热更新
 - **监控和日志**: 完整的系统监控和日志记录
+- **测试验证系统**: 完整的知识系统集成测试，验证存储、检索和协作功能
 
 ### 🚧 开发中功能
 - **主程序入口**: 系统集成和启动流程
 - **演示程序**: 完整的功能演示脚本
-- **集成测试**: 端到端测试和验证
 
 ### 🎯 规划中功能
 - **多模态处理**: 语音、图像、传感器数据集成

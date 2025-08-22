@@ -13,6 +13,13 @@ volcengine:
   
   # 对话历史管理
   max_history_turns: 10  # 保持最近N轮对话
+  
+  # 多模态向量模型配置
+  embedding:
+    api_key: "your-volcengine-embedding-api-key"  # 向量模型API密钥
+    base_url: "https://ark.cn-beijing.volces.com/api/v3/embeddings/multimodal"
+    model: "doubao-embedding-vision-250615"  # 多模态向量模型名称
+    dimension: 1024  # 向量维度
 
 # 其他API配置示例
 # openai:

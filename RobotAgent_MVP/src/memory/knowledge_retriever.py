@@ -14,7 +14,7 @@ from datetime import datetime, timedelta
 
 from .graph_storage import GraphStorage
 from .embedding_model import embedding_model
-from ..utils.logger import get_logger
+from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
 

@@ -59,6 +59,14 @@ except ImportError:
     CAMEL_AVAILABLE = False
     logging.warning("CAMEL框架未安装，使用模拟实现")
 
+# 导入记忆管理组件
+try:
+    from .memory_agent import MemoryAgent, SearchQuery, MemoryType
+    MEMORY_AGENT_AVAILABLE = True
+except ImportError:
+    MEMORY_AGENT_AVAILABLE = False
+    logging.warning("MemoryAgent未可用，知识检索功能将被禁用")
+
 
 class ConversationState(Enum):
     # 对话状态枚举
@@ -179,6 +187,10 @@ class ChatAgent(BaseRobotAgent):
         self._camel_agent: Optional[ChatAgent] = None
         self._model_backend = None
         
+        # 记忆管理集成
+        self._memory_agent: Optional[MemoryAgent] = None
+        self._knowledge_retrieval_enabled = MEMORY_AGENT_AVAILABLE and config.get('enable_knowledge_retrieval', True)
+        
         # 对话处理组件
         self._response_templates = self._load_response_templates()
         self._intent_patterns = self._load_intent_patterns()
@@ -282,6 +294,9 @@ class ChatAgent(BaseRobotAgent):
             
             # 初始化分析引擎
             self._init_analysis_engine()
+            
+            # 初始化记忆智能体
+            self._init_memory_agent()
             
             self.logger.info("专业化组件初始化完成")
             
@@ -500,6 +515,29 @@ Please provide appropriate responses based on user input.
         
         self.logger.info("分析引擎初始化完成")
     
+    def _init_memory_agent(self):
+        """
+        初始化记忆智能体
+        
+        设置知识存储、检索和对话记忆管理功能。
+        """
+        if MEMORY_AGENT_AVAILABLE and self._knowledge_retrieval_enabled:
+            try:
+                # 初始化MemoryAgent
+                memory_config = self.config.get('memory', {})
+                self._memory_agent = MemoryAgent(
+                    agent_id=f"{self.agent_id}_memory",
+                    config=memory_config
+                )
+                self.logger.info("记忆智能体初始化成功")
+            except Exception as e:
+                self.logger.error(f"记忆智能体初始化失败: {e}")
+                self._memory_agent = None
+                self._knowledge_retrieval_enabled = False
+        else:
+            self.logger.warning("记忆智能体不可用，知识检索功能已禁用")
+            self._memory_agent = None
+    
     def _register_specialized_tools(self):
         """
         注册专业化工具
@@ -657,8 +695,7 @@ Please provide appropriate responses based on user input.
         """
         try:
             # 调用父类启动方法
-            if not await super().start():
-                return False
+            await super().start()
             
             # 设置对话状态
             self.conversation_state = ConversationState.IDLE
@@ -736,6 +773,17 @@ Please provide appropriate responses based on user input.
                 result = await self._handle_analysis_task(task)
             elif task.task_type == "summarization":
                 result = await self._handle_summarization_task(task)
+            # 协调器任务描述支持
+            elif task.task_type == "analyze_input":
+                result = await self._handle_analyze_input_task(task)
+            elif task.task_type == "generate_response":
+                result = await self._handle_generate_response_task(task)
+            elif task.task_type == "analyze_complexity":
+                result = await self._handle_analyze_complexity_task(task)
+            elif task.task_type == "generate_final_response":
+                result = await self._handle_generate_final_response_task(task)
+            elif task.task_type == "simple_chat":
+                result = await self._handle_simple_chat_task(task)
             else:
                 raise ValueError(f"不支持的任务类型: {task.task_type}")
             
@@ -813,6 +861,200 @@ Please provide appropriate responses based on user input.
         summary = await self._summarize_conversation(conversation_id)
         
         return summary
+    
+    async def _handle_analyze_input_task(self, task: TaskDefinition) -> Dict[str, Any]:
+        """
+        处理输入分析任务（协调器调用）
+        
+        Args:
+            task: 任务定义对象
+            
+        Returns:
+            Dict[str, Any]: 分析结果
+        """
+        user_input = task.parameters.get('user_input', '')
+        context = task.parameters.get('context', {})
+        
+        if not user_input:
+            raise ValueError("用户输入不能为空")
+        
+        # 分析用户输入
+        analysis = await self._analyze_message(user_input)
+        
+        # 判断是否需要动作执行
+        requires_action = analysis.intent in [IntentType.COMMAND, IntentType.REQUEST]
+        
+        # 生成动作计划（如果需要）
+        action_plan = None
+        if requires_action:
+            action_plan = await self._generate_action_plan(analysis)
+        
+        return {
+            'status': 'success',
+            'data': {
+                'analysis': {
+                    'intent': analysis.intent.value,
+                    'emotion': analysis.emotion.value,
+                    'confidence': analysis.confidence,
+                    'key_entities': analysis.key_entities,
+                    'topics': analysis.topics
+                },
+                'requires_action': requires_action,
+                'action_plan': action_plan,
+                'context': context
+            }
+        }
+    
+    async def _handle_generate_response_task(self, task: TaskDefinition) -> Dict[str, Any]:
+        """
+        处理响应生成任务（协调器调用）
+        
+        Args:
+            task: 任务定义对象
+            
+        Returns:
+            Dict[str, Any]: 生成的响应
+        """
+        analysis_result = task.parameters.get('analysis_result', {})
+        context = task.parameters.get('context', {})
+        
+        # 基于分析结果生成响应
+        response = await self._generate_response_from_analysis(analysis_result, context)
+        
+        return {
+            'status': 'success',
+            'data': {
+                'response': response,
+                'context': context
+            }
+        }
+    
+    async def _handle_analyze_complexity_task(self, task: TaskDefinition) -> Dict[str, Any]:
+        """
+        处理复杂度分析任务（协调器调用）
+        
+        Args:
+            task: 任务定义对象
+            
+        Returns:
+            Dict[str, Any]: 复杂度分析结果
+        """
+        user_input = task.parameters.get('user_input', '')
+        context = task.parameters.get('context', {})
+        
+        if not user_input:
+            raise ValueError("用户输入不能为空")
+        
+        # 分析消息复杂度
+        analysis = await self._analyze_message(user_input)
+        complexity = await self._assess_task_complexity(user_input, analysis)
+        
+        return {
+            'status': 'success',
+            'data': {
+                'complexity': complexity,
+                'requires_action': analysis.intent in [IntentType.COMMAND, IntentType.REQUEST],
+                'requires_memory': analysis.intent == IntentType.COLLABORATION,
+                'analysis': {
+                    'intent': analysis.intent.value,
+                    'confidence': analysis.confidence
+                }
+            }
+        }
+    
+    async def _handle_generate_final_response_task(self, task: TaskDefinition) -> Dict[str, Any]:
+        """
+        处理最终响应生成任务（协调器调用）
+        
+        Args:
+            task: 任务定义对象
+            
+        Returns:
+            Dict[str, Any]: 最终响应
+        """
+        pipeline_data = task.parameters
+        
+        # 整合所有流水线数据生成最终响应
+        response = await self._generate_final_response_from_pipeline(pipeline_data)
+        
+        return {
+            'status': 'success',
+            'data': {
+                'response': response,
+                'pipeline_data': pipeline_data
+            }
+        }
+    
+    async def _handle_simple_chat_task(self, task: TaskDefinition) -> Dict[str, Any]:
+        """
+        处理简单聊天任务（协调器调用）
+        
+        Args:
+            task: 任务定义对象
+            
+        Returns:
+            Dict[str, Any]: 聊天响应
+        """
+        user_input = task.parameters.get('user_input', '')
+        context = task.parameters.get('context', {})
+        
+        if not user_input:
+            raise ValueError("用户输入不能为空")
+        
+        # 直接处理简单聊天
+        response = await self.process_message(
+            message=user_input,
+            user_id=context.get('user_id', 'anonymous'),
+            conversation_id=context.get('conversation_id')
+        )
+        
+        return {
+            'status': 'success',
+            'data': {
+                'response': response,
+                'context': context
+            }
+        }
+    
+    async def _process_message(self, message: AgentMessage):
+        """处理AgentMessage对象（重写BaseRobotAgent的方法）"""
+        try:
+            self.logger.info(f"ChatAgent收到消息: {message.message_type} from {message.sender_id}")
+            
+            # 根据消息类型处理
+            if message.message_type == MessageType.TEXT:
+                # 处理文本消息
+                response = await self.process_message(
+                    message=message.content,
+                    user_id=message.sender_id,
+                    conversation_id=message.conversation_id
+                )
+                
+                # 发送响应
+                await self.send_message(
+                    recipient=message.sender_id,
+                    content=response,
+                    message_type=MessageType.RESPONSE,
+                    conversation_id=message.conversation_id
+                )
+                
+            elif message.message_type == MessageType.TASK:
+                # 处理任务消息
+                await self._handle_task_message(message)
+                
+            else:
+                # 调用父类的处理方法
+                await super()._process_message(message)
+                
+        except Exception as e:
+            self.logger.error(f"ChatAgent处理消息失败: {e}")
+            # 发送错误响应
+            await self.send_message(
+                recipient=message.sender_id,
+                content=f"处理消息时发生错误: {str(e)}",
+                message_type=MessageType.ERROR,
+                conversation_id=message.conversation_id
+            )
     
     async def process_message(self, 
                             message: str, 
@@ -1176,7 +1418,7 @@ Please provide appropriate responses based on user input.
     async def _generate_camel_response(self, 
                                      context: ConversationContext,
                                      message: str) -> str:
-        # 使用CAMEL生成回复
+        # 使用CAMEL生成回复，集成知识检索功能
         # Args: context: 对话上下文, message: 用户消息
         # Returns: str: 生成的回复
         if not self._camel_agent:
@@ -1189,14 +1431,19 @@ Please provide appropriate responses based on user input.
                 role = "user" if msg['role'] == 'user' else "assistant"
                 context_messages.append(f"{role}: {msg['content']}")
             
-            # 构建完整提示
+            # 知识检索增强
+            knowledge_context = await self._retrieve_relevant_knowledge(message, context)
+            
+            # 构建增强的提示
             full_prompt = f"""
 对话历史:
 {chr(10).join(context_messages)}
 
+{knowledge_context}
+
 当前用户消息: {message}
 
-请基于对话历史和当前消息生成合适的回复。
+请基于对话历史、相关知识和当前消息生成合适的回复。
 """
             
             # 使用CAMEL生成回复
@@ -1207,6 +1454,9 @@ Please provide appropriate responses based on user input.
             
             response = self._camel_agent.step(user_message)
             
+            # 存储对话知识
+            await self._store_conversation_knowledge(context, message, response)
+            
             if response and hasattr(response, 'msg') and response.msg:
                 return response.msg.content
             else:
@@ -1215,6 +1465,105 @@ Please provide appropriate responses based on user input.
         except Exception as e:
             self.logger.error(f"CAMEL回复生成失败: {e}")
             raise
+    
+    async def _retrieve_relevant_knowledge(self, 
+                                         message: str, 
+                                         context: ConversationContext) -> str:
+        """
+        检索与当前消息相关的知识
+        
+        Args:
+            message: 用户消息
+            context: 对话上下文
+            
+        Returns:
+            str: 格式化的知识上下文
+        """
+        if not self._memory_agent or not self._knowledge_retrieval_enabled:
+            return ""
+        
+        try:
+            # 构建搜索查询
+            search_query = SearchQuery(
+                query_text=message,
+                memory_types=[MemoryType.SEMANTIC, MemoryType.EPISODIC],
+                max_results=5,
+                similarity_threshold=0.7
+            )
+            
+            # 检索相关记忆
+            memories = await self._memory_agent.search_memory(search_query)
+            
+            if not memories:
+                return ""
+            
+            # 格式化知识上下文
+            knowledge_items = []
+            for memory in memories:
+                if hasattr(memory, 'content') and memory.content:
+                    knowledge_items.append(f"- {memory.content}")
+            
+            if knowledge_items:
+                return f"""相关知识:
+{chr(10).join(knowledge_items)}
+"""
+            
+            return ""
+            
+        except Exception as e:
+            self.logger.error(f"知识检索失败: {e}")
+            return ""
+    
+    async def _store_conversation_knowledge(self, 
+                                          context: ConversationContext,
+                                          user_message: str,
+                                          agent_response) -> None:
+        """
+        存储对话知识到记忆系统
+        
+        Args:
+            context: 对话上下文
+            user_message: 用户消息
+            agent_response: 智能体回复
+        """
+        if not self._memory_agent or not self._knowledge_retrieval_enabled:
+            return
+        
+        try:
+            # 提取回复内容
+            response_content = ""
+            if agent_response and hasattr(agent_response, 'msg') and agent_response.msg:
+                response_content = agent_response.msg.content
+            elif isinstance(agent_response, str):
+                response_content = agent_response
+            
+            # 存储用户消息
+            await self._memory_agent.store_memory(
+                content=user_message,
+                memory_type=MemoryType.EPISODIC,
+                metadata={
+                    'conversation_id': context.conversation_id,
+                    'user_id': context.user_id,
+                    'role': 'user',
+                    'timestamp': datetime.now().isoformat()
+                }
+            )
+            
+            # 存储智能体回复
+            if response_content:
+                await self._memory_agent.store_memory(
+                    content=response_content,
+                    memory_type=MemoryType.EPISODIC,
+                    metadata={
+                        'conversation_id': context.conversation_id,
+                        'user_id': context.user_id,
+                        'role': 'assistant',
+                        'timestamp': datetime.now().isoformat()
+                    }
+                )
+            
+        except Exception as e:
+            self.logger.error(f"对话知识存储失败: {e}")
     
     async def _generate_fallback_response(self, 
                                         context: ConversationContext,
@@ -1713,6 +2062,154 @@ Please provide appropriate responses based on user input.
         except Exception as e:
             self.logger.error(f"导入对话历史失败: {e}")
             return False
+    
+    async def _generate_action_plan(self, analysis: MessageAnalysis) -> Dict[str, Any]:
+        """
+        基于消息分析生成动作计划
+        
+        Args:
+            analysis: 消息分析结果
+            
+        Returns:
+            Dict[str, Any]: 动作计划
+        """
+        action_plan = {
+            'type': 'action_plan',
+            'intent': analysis.intent.value,
+            'entities': analysis.key_entities,
+            'actions': []
+        }
+        
+        if analysis.intent == IntentType.COMMAND:
+            action_plan['actions'] = ['execute_command', 'verify_result']
+        elif analysis.intent == IntentType.REQUEST:
+            action_plan['actions'] = ['process_request', 'provide_response']
+        
+        return action_plan
+    
+    async def _generate_response_from_analysis(self, analysis_result: Dict[str, Any], context: Dict[str, Any]) -> str:
+        """
+        基于分析结果生成响应
+        
+        Args:
+            analysis_result: 分析结果
+            context: 上下文信息
+            
+        Returns:
+            str: 生成的响应
+        """
+        try:
+            # 提取分析信息
+            analysis_data = analysis_result.get('analysis', {})
+            intent = analysis_data.get('intent', 'conversation')
+            
+            # 构建响应消息
+            if analysis_result.get('requires_action', False):
+                action_result = analysis_result.get('action_result', {})
+                if action_result.get('status') == 'success':
+                    response = f"我已经完成了您的{intent}请求。{action_result.get('message', '')}"
+                else:
+                    response = f"抱歉，在处理您的{intent}请求时遇到了问题：{action_result.get('error', '未知错误')}"
+            else:
+                # 基于意图生成响应
+                if intent == 'question':
+                    response = "我理解您的问题，让我为您提供详细的回答。"
+                elif intent == 'conversation':
+                    response = "很高兴与您交流！有什么我可以帮助您的吗？"
+                else:
+                    response = "我已经理解了您的需求，正在为您处理。"
+            
+            return response
+            
+        except Exception as e:
+            self.logger.error(f"基于分析结果生成响应失败: {e}")
+            return "抱歉，我在处理您的请求时遇到了问题，请稍后再试。"
+    
+    async def _assess_task_complexity(self, user_input: str, analysis: MessageAnalysis) -> str:
+        """
+        评估任务复杂度
+        
+        Args:
+            user_input: 用户输入
+            analysis: 消息分析结果
+            
+        Returns:
+            str: 复杂度等级 ('low', 'medium', 'high')
+        """
+        # 基于多个因素评估复杂度
+        complexity_score = 0
+        
+        # 文本长度因素
+        if len(user_input) > 100:
+            complexity_score += 1
+        
+        # 意图复杂度
+        if analysis.intent in [IntentType.COMMAND, IntentType.COLLABORATION]:
+            complexity_score += 2
+        elif analysis.intent == IntentType.REQUEST:
+            complexity_score += 1
+        
+        # 实体数量
+        if len(analysis.key_entities) > 3:
+            complexity_score += 1
+        
+        # 置信度因素
+        if analysis.confidence < 0.7:
+            complexity_score += 1
+        
+        # 是否需要澄清
+        if analysis.requires_clarification:
+            complexity_score += 1
+        
+        # 返回复杂度等级
+        if complexity_score <= 1:
+            return 'low'
+        elif complexity_score <= 3:
+            return 'medium'
+        else:
+            return 'high'
+    
+    async def _generate_final_response_from_pipeline(self, pipeline_data: Dict[str, Any]) -> str:
+        """
+        基于流水线数据生成最终响应
+        
+        Args:
+            pipeline_data: 流水线处理数据
+            
+        Returns:
+            str: 最终响应
+        """
+        try:
+            # 提取流水线数据
+            user_input = pipeline_data.get('user_input', '')
+            analysis = pipeline_data.get('analysis', {})
+            action_result = pipeline_data.get('action_result', {})
+            
+            # 构建综合响应
+            response_parts = []
+            
+            # 添加理解确认
+            intent = analysis.get('intent', 'conversation')
+            response_parts.append(f"我理解您的{intent}需求。")
+            
+            # 添加处理结果
+            if action_result:
+                if action_result.get('status') == 'success':
+                    response_parts.append(f"已成功处理：{action_result.get('message', '')}")
+                else:
+                    response_parts.append(f"处理过程中遇到问题：{action_result.get('error', '')}")
+            
+            # 添加后续建议
+            if analysis.get('suggested_actions'):
+                suggestions = analysis['suggested_actions'][:2]  # 最多2个建议
+                if suggestions:
+                    response_parts.append(f"建议您：{', '.join(suggestions)}")
+            
+            return ' '.join(response_parts)
+            
+        except Exception as e:
+            self.logger.error(f"生成最终响应失败: {e}")
+            return "我已经处理了您的请求，如有其他需要请随时告诉我。"
 
 
 # 模块级别的工具函数

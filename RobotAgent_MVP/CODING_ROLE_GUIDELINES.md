@@ -121,7 +121,7 @@ class ChatAgent(BaseRobotAgent):
 # 作者: RobotAgent开发团队
 # 版本: 0.0.1 (Initial Release)
 # 更新时间: [当前日期]
-# 基于: BaseRobotAgent v0.0.1
+# 基于: [基础项目/类名称] [版本号]
 
 # 导入标准库
 import asyncio

@@ -21,13 +21,15 @@ from datetime import datetime
 from openai import OpenAI
 
 # 导入项目基础组件
+sys.path.append(str(Path(__file__).parent.parent))
 from agents.chat_agent import ChatAgent
 from agents.action_agent import ActionAgent
 from agents.memory_agent import MemoryAgent
 from agents.agent_coordinator import AgentCoordinator
 from communication.message_bus import get_message_bus
 from utils.config_loader import config_loader
-from utils.logger import setup_logger
+from utils.logger import setup_root_logger
+from config.config_manager import config_manager
 
 # 导入CAMEL框架组件
 try:
@@ -75,7 +77,8 @@ class RobotAgentSystem:
             ImportError: 当依赖库未安装时
         """
         # 设置日志记录器
-        self.logger = setup_logger("RobotAgentSystem")
+        setup_root_logger()
+        self.logger = logging.getLogger("RobotAgentSystem")
         
         # 加载系统配置
         self.config = self._load_system_config(config_path)
@@ -109,8 +112,8 @@ class RobotAgentSystem:
         """
         try:
             # 加载基础配置
-            system_config = config_loader.get_system_config()
-            agents_config = config_loader.get_agents_config()
+            system_config = config_loader.load_system_config()
+            agents_config = system_config.get('agents', {})
             
             # 尝试加载火山API配置
             try:
@@ -208,20 +211,14 @@ class RobotAgentSystem:
             self._init_volcengine_client()
             
             # 2. 启动消息总线
-            self.message_bus = get_message_bus()
-            await self.message_bus.start()
+            from src.communication.message_bus import initialize_message_bus
+            self.message_bus = await initialize_message_bus()
             self.logger.info("消息总线启动成功")
             
-            # 3. 创建智能体实例
-            await self._create_agents()
-            
-            # 4. 启动智能体
-            await self._start_agents()
-            
-            # 5. 创建并启动协调器
+            # 3. 创建并初始化协调器（会自动创建和启动智能体）
             await self._create_coordinator()
             
-            # 6. 设置系统状态
+            # 4. 设置系统状态
             self.is_running = True
             
             self.logger.info("RobotAgent系统启动成功")
@@ -232,57 +229,7 @@ class RobotAgentSystem:
             await self.shutdown()
             return False
     
-    async def _create_agents(self):
-        """
-        创建智能体实例
-        """
-        try:
-            # 创建对话智能体
-            chat_config = self.config['agents'].get('chat_agent', {})
-            
-            self.chat_agent = ChatAgent(
-                agent_id="chat_agent_001",
-                config=chat_config,
-                volcengine_client=self.volcengine_client
-            )
-            
-            # 创建动作智能体
-            action_config = self.config['agents'].get('action_agent', {})
-            self.action_agent = ActionAgent(
-                agent_id="action_agent_001",
-                config=action_config
-            )
-            
-            # 创建记忆智能体
-            memory_config = self.config['agents'].get('memory_agent', {})
-            self.memory_agent = MemoryAgent(
-                agent_id="memory_agent_001",
-                config=memory_config
-            )
-            
-            self.logger.info("智能体实例创建成功")
-            
-        except Exception as e:
-            self.logger.error(f"智能体创建失败: {e}")
-            raise
-    
-    async def _start_agents(self):
-        """
-        启动所有智能体
-        """
-        try:
-            # 并行启动所有智能体
-            await asyncio.gather(
-                self.chat_agent.start(),
-                self.action_agent.start(),
-                self.memory_agent.start()
-            )
-            
-            self.logger.info("所有智能体启动成功")
-            
-        except Exception as e:
-            self.logger.error(f"智能体启动失败: {e}")
-            raise
+
     
     async def _create_coordinator(self):
         """
@@ -292,13 +239,8 @@ class RobotAgentSystem:
             # 创建协调器
             self.coordinator = AgentCoordinator()
             
-            # 注册智能体
-            await self.coordinator.register_agent(self.chat_agent)
-            await self.coordinator.register_agent(self.action_agent)
-            await self.coordinator.register_agent(self.memory_agent)
-            
-            # 启动协调器
-            await self.coordinator.start()
+            # 初始化协调器（会自动创建和启动智能体）
+            await self.coordinator.initialize()
             
             self.logger.info("智能体协调器启动成功")
             
@@ -486,17 +428,17 @@ class RobotAgentSystem:
             
             # 智能体状态
             print("🤖 智能体状态：")
-            if self.chat_agent:
+            if self.coordinator and hasattr(self.coordinator, 'chat_agent') and self.coordinator.chat_agent:
                 print(f"   ChatAgent: 🟢 运行中 (对话智能体)")
             else:
                 print(f"   ChatAgent: 🔴 未创建 (对话智能体)")
                 
-            if self.action_agent:
+            if self.coordinator and hasattr(self.coordinator, 'action_agent') and self.coordinator.action_agent:
                 print(f"   ActionAgent: 🟢 运行中 (动作智能体)")
             else:
                 print(f"   ActionAgent: 🔴 未创建 (动作智能体)")
                 
-            if self.memory_agent:
+            if self.coordinator and hasattr(self.coordinator, 'memory_agent') and self.coordinator.memory_agent:
                 print(f"   MemoryAgent: 🟢 运行中 (记忆智能体)")
             else:
                 print(f"   MemoryAgent: 🔴 未创建 (记忆智能体)")
@@ -573,19 +515,10 @@ class RobotAgentSystem:
         self._shutdown_event.set()
         
         try:
-            # 关闭协调器
+            # 关闭协调器（会自动关闭所有智能体）
             if self.coordinator:
                 await self.coordinator.shutdown()
-                self.logger.info("协调器已关闭")
-            
-            # 关闭智能体
-            if self.chat_agent:
-                await self.chat_agent.stop()
-            if self.action_agent:
-                await self.action_agent.stop()
-            if self.memory_agent:
-                await self.memory_agent.stop()
-            self.logger.info("所有智能体已关闭")
+                self.logger.info("协调器和所有智能体已关闭")
             
             # 关闭消息总线
             if self.message_bus:

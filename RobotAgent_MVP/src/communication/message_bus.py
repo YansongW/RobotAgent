@@ -372,11 +372,10 @@ class MessageBus:
                 return None
             
             # 优先处理高优先级消息
-            for priority in [MessagePriority.CRITICAL, MessagePriority.HIGH, 
-                           MessagePriority.MEDIUM, MessagePriority.LOW]:
-                priority_queue = self.priority_queues[agent_id].get(priority)
+            for priority_value in [6, 5, 4, 3, 2, 1]:  # CRITICAL到LOW的优先级值
+                priority_queue = self.priority_queues[agent_id].get(priority_value)
                 if priority_queue and not priority_queue.empty():
-                    message = await asyncio.wait_for(priority_queue.get(), timeout=timeout or 0.1)
+                    message = await asyncio.wait_for(priority_queue.get(), timeout=timeout or self.message_timeout)
                     self.message_stats.total_received += 1
                     return message
             
@@ -477,7 +476,7 @@ class MessageBus:
             "agent_id": agent_id,
             "queue_size": self.message_queues[agent_id].qsize(),
             "priority_queues": {
-                priority.value: queue.qsize() 
+                priority: queue.qsize() 
                 for priority, queue in self.priority_queues[agent_id].items()
             },
             "max_queue_size": self.max_queue_size
@@ -513,7 +512,7 @@ class MessageBus:
         
         # 创建优先级队列
         self.priority_queues[agent_id] = {
-            priority: asyncio.Queue(maxsize=self.max_queue_size // 4)
+            priority.value: asyncio.Queue(maxsize=self.max_queue_size // 4)
             for priority in MessagePriority
         }
 
@@ -663,7 +662,28 @@ class MessageBus:
 
     def _on_agent_cleanup(self, agent_id: str):
         """智能体清理回调"""
-        asyncio.create_task(self.unregister_agent(agent_id))
+        try:
+            # 检查是否有运行中的事件循环
+            loop = asyncio.get_running_loop()
+            if loop and not loop.is_closed():
+                asyncio.create_task(self.unregister_agent(agent_id))
+            else:
+                # 如果没有运行中的事件循环，直接同步清理
+                self._sync_unregister_agent(agent_id)
+        except RuntimeError:
+            # 没有运行中的事件循环，直接同步清理
+            self._sync_unregister_agent(agent_id)
+    
+    def _sync_unregister_agent(self, agent_id: str):
+        """同步方式注销智能体"""
+        if agent_id in self.registered_agents:
+            del self.registered_agents[agent_id]
+        if agent_id in self.agent_metadata:
+            del self.agent_metadata[agent_id]
+        if agent_id in self.message_queues:
+            del self.message_queues[agent_id]
+        if agent_id in self.message_handlers:
+            del self.message_handlers[agent_id]
 
     async def _message_processor_loop(self):
         """消息处理循环"""
