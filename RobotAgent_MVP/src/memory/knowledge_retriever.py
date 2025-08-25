@@ -3,8 +3,8 @@
 # 知识检索器 (Knowledge Retriever)
 # 实现基于向量相似度的知识检索功能，支持多种检索模式
 # 作者: RobotAgent开发团队
-# 版本: 0.0.1 (Initial Release)
-# 更新时间: 2024=5-08-21
+# 版本: 0.0.2 (Bug Fix Release)
+# 更新时间: 2025年08月25日
 
 import time
 from typing import List, Dict, Tuple, Optional, Set, Any

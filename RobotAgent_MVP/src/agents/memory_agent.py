@@ -3,8 +3,8 @@
 # 记忆智能体 (Memory Agent)
 # 专注于多层记忆管理、知识存储和检索的智能体实现
 # 作者: RobotAgent开发团队
-# 版本: 0.0.1 (Initial Release)
-# 更新时间: 2025-08-21
+# 版本: 0.0.2 (Bug Fix Release)
+# 更新时间: 2025年08月25日
 
 # 导入标准库
 import asyncio
@@ -48,64 +48,7 @@ except ImportError:
     logging.warning("CAMEL框架未安装，使用模拟实现")
 
 
-class MemoryType(Enum):
-    """记忆类型枚举"""
-    WORKING = "working"  # 工作记忆
-    SHORT_TERM = "short_term"  # 短期记忆
-    LONG_TERM = "long_term"  # 长期记忆
-    EPISODIC = "episodic"  # 情节记忆
-    SEMANTIC = "semantic"  # 语义记忆
-    PROCEDURAL = "procedural"  # 程序记忆
-
-
-class MemoryPriority(Enum):
-    """记忆优先级枚举"""
-    LOW = 1
-    MEDIUM = 2
-    HIGH = 3
-    CRITICAL = 4
-
-
-@dataclass
-class MemoryItem:
-    """记忆项数据结构"""
-    id: str
-    content: Any
-    memory_type: MemoryType
-    priority: MemoryPriority
-    tags: List[str]
-    source_agent: str
-    created_at: datetime
-    last_accessed: datetime
-    access_count: int = 0
-    decay_factor: float = 1.0
-    embedding: Optional[List[float]] = None
-    metadata: Optional[Dict[str, Any]] = None
-    related_memories: List[str] = None
-    
-    def __post_init__(self):
-        if self.related_memories is None:
-            self.related_memories = []
-        if self.metadata is None:
-            self.metadata = {}
-
-    def to_dict(self) -> Dict[str, Any]:
-        """转换为字典格式"""
-        return {
-            "id": self.id,
-            "content": self.content,
-            "memory_type": self.memory_type.value,
-            "priority": self.priority.value,
-            "tags": self.tags,
-            "source_agent": self.source_agent,
-            "created_at": self.created_at.isoformat(),
-            "last_accessed": self.last_accessed.isoformat(),
-            "access_count": self.access_count,
-            "decay_factor": self.decay_factor,
-            "embedding": self.embedding,
-            "metadata": self.metadata,
-            "related_memories": self.related_memories
-        }
+# MemoryType, MemoryPriority, MemoryItem 已从 config 模块导入
 
 
 @dataclass
@@ -243,7 +186,7 @@ class MemoryAgent(BaseRobotAgent):
 
     async def store_memory(self, content: Any, memory_type: MemoryType, 
                           source_agent: str, tags: List[str] = None, 
-                          priority: MemoryPriority = MemoryPriority.MEDIUM,
+                          priority: MemoryPriority = MemoryPriority.NORMAL,
                           metadata: Dict[str, Any] = None) -> str:
         """存储记忆
         

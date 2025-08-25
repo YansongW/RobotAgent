@@ -85,7 +85,7 @@ class MessageBus:
         self._shutdown_event = asyncio.Event()
         
         # 智能体注册表
-        self.registered_agents: Dict[str, weakref.ReferenceType] = {}
+        self.registered_agents: Dict[str, Any] = {}
         self.agent_metadata: Dict[str, Dict[str, Any]] = {}
         
         # 消息队列（每个智能体一个队列）
@@ -176,13 +176,17 @@ class MessageBus:
             是否注册成功
         """
         try:
+            # 添加调试信息
+            instance_id = getattr(self, '_instance_id', id(self))
+            self.logger.info(f"MessageBus实例 {instance_id} 尝试注册智能体 {agent_id}")
+            self.logger.info(f"当前已注册的智能体: {list(self.registered_agents.keys())}")
+            
             if agent_id in self.registered_agents:
                 self.logger.warning(f"智能体 {agent_id} 已经注册")
                 return False
             
-            # 创建弱引用
-            weak_ref = weakref.ref(agent_ref, lambda ref: self._on_agent_cleanup(agent_id))
-            self.registered_agents[agent_id] = weak_ref
+            # 使用强引用保持智能体对象
+            self.registered_agents[agent_id] = agent_ref
             
             # 存储元数据
             self.agent_metadata[agent_id] = metadata or {}
@@ -558,7 +562,10 @@ class MessageBus:
             return False
         
         if message.receiver_id and message.receiver_id not in self.registered_agents:
-            self.logger.error(f"接收者 {message.receiver_id} 未注册")
+            # 添加详细的调试信息
+            instance_id = getattr(self, '_instance_id', id(self))
+            self.logger.error(f"MessageBus实例 {instance_id}: 接收者 {message.receiver_id} 未注册")
+            self.logger.error(f"当前已注册的智能体: {list(self.registered_agents.keys())}")
             return False
         
         return True
@@ -612,7 +619,7 @@ class MessageBus:
             
             # 根据优先级选择队列
             if message.priority and message.priority != MessagePriority.MEDIUM:
-                priority_queue = self.priority_queues[agent_id].get(message.priority)
+                priority_queue = self.priority_queues[agent_id].get(message.priority.value)
                 if priority_queue and not priority_queue.full():
                     await priority_queue.put(message)
                     return True
@@ -661,18 +668,9 @@ class MessageBus:
         self.message_history.append(history_entry)
 
     def _on_agent_cleanup(self, agent_id: str):
-        """智能体清理回调"""
-        try:
-            # 检查是否有运行中的事件循环
-            loop = asyncio.get_running_loop()
-            if loop and not loop.is_closed():
-                asyncio.create_task(self.unregister_agent(agent_id))
-            else:
-                # 如果没有运行中的事件循环，直接同步清理
-                self._sync_unregister_agent(agent_id)
-        except RuntimeError:
-            # 没有运行中的事件循环，直接同步清理
-            self._sync_unregister_agent(agent_id)
+        """智能体清理回调（现在使用强引用，此方法不应被调用）"""
+        self.logger.warning(f"_on_agent_cleanup被调用，智能体: {agent_id}，这不应该发生")
+        # 不执行任何清理操作，因为现在使用强引用
     
     def _sync_unregister_agent(self, agent_id: str):
         """同步方式注销智能体"""
@@ -742,12 +740,11 @@ class MessageBus:
                             f"智能体 {agent_id} 的消息队列接近满载: {queue_size}/{self.max_queue_size}"
                         )
                     
-                    # 清理无效的智能体引用
+                    # 检查智能体引用是否有效
                     if agent_id in self.registered_agents:
-                        agent_ref = self.registered_agents[agent_id]()
-                        if agent_ref is None:
-                            self.logger.info(f"检测到智能体 {agent_id} 已被垃圾回收，开始清理")
-                            await self.unregister_agent(agent_id)
+                        agent_ref = self.registered_agents[agent_id]
+                        # 现在使用强引用，不需要检查垃圾回收
+                        # 智能体的生命周期由协调器管理
                 
             except Exception as e:
                 self.logger.error(f"队列监控循环异常: {str(e)}")
@@ -762,6 +759,9 @@ def get_message_bus() -> MessageBus:
     global _global_message_bus
     if _global_message_bus is None:
         _global_message_bus = MessageBus()
+        # 添加实例ID用于调试
+        _global_message_bus._instance_id = id(_global_message_bus)
+        _global_message_bus.logger.info(f"创建新的MessageBus实例，ID: {_global_message_bus._instance_id}")
     return _global_message_bus
 
 

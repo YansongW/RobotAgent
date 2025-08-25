@@ -25,7 +25,7 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from src.utils.config_loader import ConfigLoader
+from src.utils.config_loader import config_loader
 
 
 class ConfigType(Enum):
@@ -112,7 +112,7 @@ class ConfigManager:
         self.config_cache: Dict[str, Any] = {}
         
         # 配置加载器
-        self.config_loader = ConfigLoader(self.config_dir.parent)
+        self.config_loader = config_loader
         
         # 配置监听器
         self.config_listeners: Dict[str, List[callable]] = {}

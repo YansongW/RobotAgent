@@ -28,6 +28,7 @@
 import asyncio
 import logging
 import json
+import os
 import re
 from typing import Dict, Any, List, Optional, Union, Tuple
 from datetime import datetime
@@ -41,12 +42,13 @@ from .base_agent import (
 )
 from config import (
     MessageType, AgentMessage, MessagePriority, TaskMessage, ResponseMessage,
-    IntentType, MessageAnalysis
+    IntentType, MessageAnalysis, MemoryType
 )
 from src.communication.protocols import (
     CollaborationMode, StatusMessage
 )
 from src.communication.message_bus import get_message_bus
+from src.utils.config_loader import ConfigLoader, get_config_loader
 
 # 导入CAMEL框架组件
 try:
@@ -59,13 +61,52 @@ except ImportError:
     CAMEL_AVAILABLE = False
     logging.warning("CAMEL框架未安装，使用模拟实现")
 
-# 导入记忆管理组件
+# 导入记忆智能体
 try:
-    from .memory_agent import MemoryAgent, SearchQuery, MemoryType
+    # 尝试从当前目录导入memory_agent模块
+    from memory_agent import MemoryAgent, SearchQuery
     MEMORY_AGENT_AVAILABLE = True
 except ImportError:
-    MEMORY_AGENT_AVAILABLE = False
-    logging.warning("MemoryAgent未可用，知识检索功能将被禁用")
+    try:
+        # 尝试从完整路径导入
+        from src.agents.memory_agent import MemoryAgent, SearchQuery
+        MEMORY_AGENT_AVAILABLE = True
+    except ImportError:
+        try:
+            # 尝试从上级目录导入
+            import sys
+            import os
+            sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            from agents.memory_agent import MemoryAgent, SearchQuery
+            MEMORY_AGENT_AVAILABLE = True
+        except ImportError:
+            MEMORY_AGENT_AVAILABLE = False
+            logging.warning("MemoryAgent未找到，记忆功能将被禁用。请确保memory_agent.py文件存在于正确的路径中。")
+    # 实现基础的记忆搜索功能
+    @dataclass
+    class SearchQuery:
+        """记忆搜索查询类
+        
+        提供基础的记忆搜索功能实现,包括:
+        - 文本查询
+        - 记忆类型过滤
+        - 结果数量限制
+        - 相似度阈值控制
+        """
+        query_text: str  # 搜索查询文本
+        memory_types: List[MemoryType] = None  # 要搜索的记忆类型列表
+        max_results: int = 5  # 最大返回结果数
+        similarity_threshold: float = 0.7  # 相似度阈值
+        
+        def search(self) -> List[Dict]:
+            """执行记忆搜索
+            
+            Returns:
+                List[Dict]: 搜索结果列表,每个结果包含内容和相关度
+            """
+            # 基础实现 - 返回空列表
+            # 真实实现应该连接到向量数据库进行语义搜索
+            return []
 
 
 class ConversationState(Enum):
@@ -78,15 +119,7 @@ class ConversationState(Enum):
     COLLABORATING = "collaborating"  # 与其他智能体协作
 
 
-class IntentType(Enum):
-    # 意图类型枚举
-    QUESTION = "question"            # 问题询问
-    REQUEST = "request"              # 请求执行
-    COMMAND = "command"              # 命令指令
-    CONVERSATION = "conversation"    # 日常对话
-    CLARIFICATION = "clarification"  # 澄清说明
-    COLLABORATION = "collaboration"  # 协作请求
-    UNKNOWN = "unknown"              # 未知意图
+# 注意：IntentType已从config.message_types导入，此处不再重复定义
 
 
 class EmotionType(Enum):
@@ -115,19 +148,10 @@ class ConversationContext:
     intent_history: List[IntentType] = field(default_factory=list)
 
 
-@dataclass
-class MessageAnalysis:
-    # 消息分析结果
-    intent: IntentType
-    emotion: EmotionType
-    confidence: float
-    key_entities: List[str] = field(default_factory=list)
-    topics: List[str] = field(default_factory=list)
-    requires_clarification: bool = False
-    suggested_actions: List[str] = field(default_factory=list)
+# 注意：MessageAnalysis已从config.message_types导入，此处不再重复定义
 
 
-class ChatAgent(BaseRobotAgent):
+class RobotChatAgent(BaseRobotAgent):
     
     # 对话智能体 (Chat Agent)
     
@@ -204,10 +228,10 @@ class ChatAgent(BaseRobotAgent):
             'satisfaction_score': 0.0
         }
         
-        # 初始化专业化组件
-        self._init_specialized_components()
+        # 延迟初始化标志
+        self._specialized_components_initialized = False
         
-        # 注册专业化工具
+        # 注册专业化工具（不依赖外部服务的部分）
         self._register_specialized_tools()
         
         # 添加专业化能力
@@ -229,30 +253,58 @@ class ChatAgent(BaseRobotAgent):
         # Raises:
         #    ValueError: 当配置参数无效时
 
-        # 默认配置
-        default_config = {
-            'model_name': 'gpt-3.5-turbo',
-            'model_type': 'openai',
-            'temperature': 0.7,
-            'max_tokens': 1000,
-            'timeout': 30.0,
-            'retry_count': 3,
-            'message_window_size': 10,
-            'context_retention_hours': 24,
-            'enable_emotion_analysis': True,
-            'enable_intent_recognition': True,
-            'enable_learning': True,
-            'response_style': 'friendly',
-            'language': 'zh-CN'
-        }
-        
-        # 合并配置
-        merged_config = {**default_config, **(config or {})}
-        
-        # 验证配置
-        self._validate_config(merged_config)
-        
-        return merged_config
+        try:
+            # 加载火山方舟API配置
+            config_loader = get_config_loader()
+            volcengine_config = config_loader.get_volcengine_config()
+            
+            # 默认配置，使用火山方舟配置
+            default_config = {
+                'model_name': volcengine_config.get('default_model', 'doubao-seed-1-6-250615'),
+                'model_type': 'volcengine',
+                'temperature': volcengine_config.get('temperature', 0.7),
+                'max_tokens': volcengine_config.get('max_tokens', 2000),
+                'timeout': 30.0,
+                'retry_count': 3,
+                'message_window_size': volcengine_config.get('max_history_turns', 10),
+                'context_retention_hours': 24,
+                'enable_emotion_analysis': True,
+                'enable_intent_recognition': True,
+                'enable_learning': True,
+                'response_style': 'friendly',
+                'language': 'zh-CN',
+                'api_key': volcengine_config.get('api_key'),
+                'base_url': volcengine_config.get('base_url')
+            }
+            
+            # 合并用户提供的配置
+            merged_config = {**default_config, **(config or {})}
+            
+            # 验证配置
+            self._validate_config(merged_config)
+            
+            return merged_config
+            
+        except Exception as e:
+            self.logger.error(f"配置加载失败: {e}")
+            # 返回基础默认配置
+            basic_config = {
+                'model_name': 'doubao-seed-1-6-250615',
+                'model_type': 'volcengine',
+                'temperature': 0.7,
+                'max_tokens': 2000,
+                'timeout': 30.0,
+                'retry_count': 3,
+                'message_window_size': 10,
+                'context_retention_hours': 24,
+                'enable_emotion_analysis': True,
+                'enable_intent_recognition': True,
+                'enable_learning': False,
+                'response_style': 'friendly',
+                'language': 'zh-CN'
+            }
+            merged_config = {**basic_config, **(config or {})}
+            return merged_config
     
     def _validate_config(self, config: Dict[str, Any]):
         """
@@ -324,9 +376,10 @@ class ChatAgent(BaseRobotAgent):
             self._model_backend = self._create_model_backend()
             
             # 创建CAMEL ChatAgent
+            from camel.messages import BaseMessage
             self._camel_agent = ChatAgent(
                 system_message=BaseMessage.make_assistant_message(
-                    role_name="对话助手",
+                    role_name="assistant",
                     content=system_prompt
                 ),
                 model=self._model_backend,
@@ -349,22 +402,37 @@ class ChatAgent(BaseRobotAgent):
         if not CAMEL_AVAILABLE:
             return None
         
-        model_type = self.config.get('model_type', 'openai')
-        model_name = self.config.get('model_name', 'gpt-3.5-turbo')
-        
-        if model_type.lower() == 'openai':
-            model_type_enum = ModelType.GPT_3_5_TURBO
-        else:
-            model_type_enum = ModelType.GPT_3_5_TURBO  # 默认使用GPT-3.5
-        
-        return ModelFactory.create(
-            model_platform=model_type_enum,
-            model_type=model_name,
-            model_config_dict={
-                'temperature': self.config.get('temperature', 0.7),
-                'max_tokens': self.config.get('max_tokens', 1000)
-            }
-        )
+        try:
+            # 加载火山方舟API配置
+            config_loader = get_config_loader()
+            volcengine_config = config_loader.get_volcengine_config()
+            
+            # 从环境变量获取API密钥，避免硬编码
+            api_key = os.getenv('VOLCENGINE_API_KEY', volcengine_config.get('api_key'))
+            if not api_key:
+                raise ValueError("火山方舟API密钥未配置")
+            
+            # 使用火山方舟配置创建模型后端
+            from camel.models import OpenAIModel
+            
+            # 设置环境变量供OpenAI客户端使用
+            os.environ['OPENAI_API_KEY'] = api_key
+            os.environ['OPENAI_BASE_URL'] = volcengine_config.get('base_url', 'https://ark.cn-beijing.volces.com/api/v3')
+            
+            model_backend = OpenAIModel(
+                model_type=volcengine_config.get('default_model', 'doubao-seed-1-6-250615'),
+                model_config_dict={
+                    'temperature': volcengine_config.get('temperature', 0.7),
+                    'max_tokens': volcengine_config.get('max_tokens', 2000)
+                }
+            )
+            
+            self.logger.info(f"火山方舟模型后端创建成功: {volcengine_config.get('default_model')}")
+            return model_backend
+            
+        except Exception as e:
+            self.logger.error(f"创建火山方舟模型后端失败: {e}")
+            return None
     
     def _build_system_prompt(self) -> str:
         """
@@ -695,7 +763,14 @@ Please provide appropriate responses based on user input.
         """
         try:
             # 调用父类启动方法
+            self.logger.info(f"正在启动对话智能体 {self.agent_id}")
             await super().start()
+            self.logger.info(f"父类启动方法执行完成")
+            
+            # 初始化专业化组件（延迟初始化）
+            if not self._specialized_components_initialized:
+                self._init_specialized_components()
+                self._specialized_components_initialized = True
             
             # 设置对话状态
             self.conversation_state = ConversationState.IDLE
@@ -705,11 +780,16 @@ Please provide appropriate responses based on user input.
                 # CAMEL智能体通常不需要显式启动
                 pass
             
+            # 启动定期清理任务
+            self._cleanup_task = asyncio.create_task(self._periodic_cleanup())
+            
             self.logger.info(f"对话智能体 {self.agent_id} 启动成功")
             return True
             
         except Exception as e:
             self.logger.error(f"对话智能体启动失败: {e}")
+            import traceback
+            self.logger.error(f"启动失败详细信息: {traceback.format_exc()}")
             await self._set_state(AgentState.ERROR)
             return False
     
@@ -725,8 +805,12 @@ Please provide appropriate responses based on user input.
             await self._cleanup_conversations()
             
             # 取消清理任务
-            if hasattr(self, '_cleanup_task'):
+            if hasattr(self, '_cleanup_task') and self._cleanup_task is not None:
                 self._cleanup_task.cancel()
+                try:
+                    await self._cleanup_task
+                except asyncio.CancelledError:
+                    pass
             
             # 调用父类停止方法
             result = await super().stop()
@@ -1039,8 +1123,24 @@ Please provide appropriate responses based on user input.
                 )
                 
             elif message.message_type == MessageType.TASK:
-                # 处理任务消息
-                await self._handle_task_message(message)
+                # 处理任务消息 - 创建TaskDefinition并执行
+                if hasattr(message, 'task_definition') and message.task_definition:
+                    result = await self.execute_task(message.task_definition)
+                    # 发送任务结果响应
+                    await self.send_message(
+                        recipient=message.sender_id,
+                        content=str(result),
+                        message_type=MessageType.RESPONSE,
+                        conversation_id=message.conversation_id
+                    )
+                else:
+                    self.logger.error(f"任务消息缺少task_definition: {message}")
+                    await self.send_message(
+                        recipient=message.sender_id,
+                        content="任务消息格式错误",
+                        message_type=MessageType.ERROR,
+                        conversation_id=message.conversation_id
+                    )
                 
             else:
                 # 调用父类的处理方法
@@ -2215,7 +2315,7 @@ Please provide appropriate responses based on user input.
 # 模块级别的工具函数
 
 def create_chat_agent(agent_id: str, 
-                     config: Dict[str, Any] = None) -> ChatAgent:
+                     config: Dict[str, Any] = None) -> RobotChatAgent:
     """
     创建对话智能体的便捷函数
     
@@ -2224,9 +2324,9 @@ def create_chat_agent(agent_id: str,
         config: 配置参数
         
     Returns:
-        ChatAgent: 创建的对话智能体实例
+        RobotChatAgent: 创建的对话智能体实例
     """
-    return ChatAgent(agent_id, config)
+    return RobotChatAgent(agent_id, config)
 
 
 def get_default_chat_config() -> Dict[str, Any]:
@@ -2277,7 +2377,7 @@ class ResponseGenerationError(ChatAgentError):
 
 # 导出的公共接口
 __all__ = [
-    'ChatAgent',
+    'RobotChatAgent',
     'ConversationState',
     'IntentType', 
     'EmotionType',

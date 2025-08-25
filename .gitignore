@@ -102,6 +102,7 @@ dmypy.json
 # IDE
 .vscode/
 .idea/
+.trae/
 *.swp
 *.swo
 *~

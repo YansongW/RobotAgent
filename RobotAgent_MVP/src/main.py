@@ -3,9 +3,9 @@
 # RobotAgent MVP 主程序入口 (Main Entry Point)
 # 启动和管理三智能体协作系统的主程序
 # 作者: RobotAgent开发团队
-# 版本: 0.0.1 (Initial Release)
-# 更新时间: 2025-01-20
-# 基于: BaseRobotAgent v0.0.1
+# 版本: 0.0.2 (Bug Fix Release)
+# 更新时间: 2025年08月25日
+# 基于: BaseRobotAgent v0.0.2
 
 # 导入标准库
 import asyncio
@@ -18,18 +18,36 @@ from typing import Dict, Any, Optional
 from datetime import datetime
 
 # 导入第三方库
+print("📦 正在导入OpenAI库...")
 from openai import OpenAI
+print("✅ OpenAI库导入成功")
 
 # 导入项目基础组件
+print("📦 正在导入项目基础组件...")
 sys.path.append(str(Path(__file__).parent.parent))
-from agents.chat_agent import ChatAgent
-from agents.action_agent import ActionAgent
-from agents.memory_agent import MemoryAgent
-from agents.agent_coordinator import AgentCoordinator
-from communication.message_bus import get_message_bus
-from utils.config_loader import config_loader
-from utils.logger import setup_root_logger
+sys.path.append(str(Path(__file__).parent))
+print("📦 正在导入智能体模块...")
+print("  📦 正在导入RobotChatAgent...")
+from src.agents.chat_agent import RobotChatAgent
+print("  ✅ RobotChatAgent导入成功")
+print("  📦 正在导入ActionAgent...")
+from src.agents.action_agent import ActionAgent
+print("  ✅ ActionAgent导入成功")
+print("  📦 正在导入MemoryAgent...")
+from src.agents.memory_agent import MemoryAgent
+print("  ✅ MemoryAgent导入成功")
+print("  📦 正在导入AgentCoordinator...")
+from src.agents.agent_coordinator import AgentCoordinator
+print("  ✅ AgentCoordinator导入成功")
+print("✅ 智能体模块导入成功")
+print("📦 正在导入通信模块...")
+from src.communication.message_bus import get_message_bus
+print("✅ 通信模块导入成功")
+print("📦 正在导入工具模块...")
+from src.utils.config_loader import get_config_loader
+from src.utils.logger import setup_root_logger
 from config.config_manager import config_manager
+print("✅ 工具模块导入成功")
 
 # 导入CAMEL框架组件
 try:
@@ -49,7 +67,7 @@ class RobotAgentSystem:
     提供统一的系统接口和生命周期管理。
     
     Attributes:
-        chat_agent (ChatAgent): 对话智能体实例
+        chat_agent (RobotChatAgent): 对话智能体实例
         action_agent (ActionAgent): 动作智能体实例
         memory_agent (MemoryAgent): 记忆智能体实例
         coordinator (AgentCoordinator): 智能体协调器
@@ -76,27 +94,41 @@ class RobotAgentSystem:
             ValueError: 当配置文件无效时
             ImportError: 当依赖库未安装时
         """
+        print("🔧 开始初始化RobotAgent系统...")
+        
         # 设置日志记录器
+        print("📝 设置日志记录器...")
         setup_root_logger()
         self.logger = logging.getLogger("RobotAgentSystem")
+        print("✅ 日志记录器设置完成")
         
         # 加载系统配置
+        print("📋 加载系统配置...")
         self.config = self._load_system_config(config_path)
+        print("✅ 系统配置加载完成")
         
         # 初始化系统组件
+        print("🔧 初始化系统组件...")
         self.chat_agent = None
         self.action_agent = None
         self.memory_agent = None
         self.coordinator = None
         self.message_bus = None
         self.volcengine_client = None
+        print("✅ 系统组件初始化完成")
         
         # 系统状态
+        print("📊 设置系统状态...")
         self.is_running = False
         self._shutdown_event = asyncio.Event()
+        print("✅ 系统状态设置完成")
         
         # 注册信号处理器
+        print("🔔 注册信号处理器...")
         self._setup_signal_handlers()
+        print("✅ 信号处理器注册完成")
+        
+        print("🎉 RobotAgent系统初始化完成!")
         
         self.logger.info("RobotAgent系统初始化完成")
     
@@ -112,6 +144,7 @@ class RobotAgentSystem:
         """
         try:
             # 加载基础配置
+            config_loader = get_config_loader()
             system_config = config_loader.load_system_config()
             agents_config = system_config.get('agents', {})
             
@@ -206,26 +239,28 @@ class RobotAgentSystem:
         """
         try:
             self.logger.info("正在启动RobotAgent系统...")
+            print("🚀 开始启动RobotAgent系统...")
             
-            # 1. 初始化火山API客户端
-            self._init_volcengine_client()
-            
-            # 2. 启动消息总线
-            from src.communication.message_bus import initialize_message_bus
-            self.message_bus = await initialize_message_bus()
-            self.logger.info("消息总线启动成功")
-            
-            # 3. 创建并初始化协调器（会自动创建和启动智能体）
+            # 1. 创建并初始化协调器（会自动创建消息总线和启动智能体）
+            print("📡 正在创建协调器...")
             await self._create_coordinator()
+            print("✅ 协调器创建完成")
             
-            # 4. 设置系统状态
+            # 2. 初始化火山API客户端（作为ChatAgent的后端）
+            print("🔧 正在初始化火山API客户端...")
+            self._init_volcengine_client()
+            print("✅ 火山API客户端初始化完成")
+            
+            # 3. 设置系统状态
             self.is_running = True
             
             self.logger.info("RobotAgent系统启动成功")
+            print("🎉 RobotAgent系统启动成功!")
             return True
             
         except Exception as e:
             self.logger.error(f"系统启动失败: {e}")
+            print(f"❌ 系统启动失败: {e}")
             await self.shutdown()
             return False
     
@@ -236,16 +271,35 @@ class RobotAgentSystem:
         创建并启动智能体协调器
         """
         try:
-            # 创建协调器
-            self.coordinator = AgentCoordinator()
+            # 创建协调器，传入智能体配置
+            coordinator_config = {
+                'chat_agent': self.config.get('agents', {}).get('chat_agent', {}),
+                'action_agent': self.config.get('agents', {}).get('action_agent', {}),
+                'memory_agent': self.config.get('agents', {}).get('memory_agent', {})
+            }
             
-            # 初始化协调器（会自动创建和启动智能体）
+            self.logger.info("创建AgentCoordinator实例...")
+            print("  📋 正在创建AgentCoordinator实例...")
+            self.coordinator = AgentCoordinator(coordinator_config)
+            self.logger.info("AgentCoordinator实例创建成功")
+            print("  ✅ AgentCoordinator实例创建成功")
+            
+            # 初始化协调器（会自动创建消息总线和启动智能体）
+            self.logger.info("开始初始化协调器...")
+            print("  🔄 正在初始化协调器...")
             await self.coordinator.initialize()
+            self.logger.info("协调器初始化完成")
+            print("  ✅ 协调器初始化完成")
+            
+            # 获取消息总线引用
+            self.message_bus = self.coordinator.message_bus
             
             self.logger.info("智能体协调器启动成功")
+            print("  🎯 智能体协调器启动成功")
             
         except Exception as e:
             self.logger.error(f"协调器启动失败: {e}")
+            print(f"  ❌ 协调器启动失败: {e}")
             raise
     
     async def _chat_with_volcengine(self, user_message: str) -> str:
@@ -315,12 +369,8 @@ class RobotAgentSystem:
                 # 处理用户消息
                 print("🤖 智能体正在处理...")
                 
-                # 优先使用火山API
-                if self.volcengine_client:
-                    response = await self._chat_with_volcengine(user_input)
-                    print(f"🤖 系统: {response}")
-                else:
-                    await self._process_user_message(user_input)
+                # 使用协调器处理用户输入（真正的智能体协作）
+                await self._process_user_message(user_input)
                 
             except KeyboardInterrupt:
                 print("\n\n👋 系统被用户中断")
@@ -484,24 +534,44 @@ class RobotAgentSystem:
             user_input: 用户输入的消息
         """
         try:
-            print("🤖 智能体正在处理...")
-            
-            # 通过协调器处理用户输入
+            # 通过协调器处理用户输入（真正的三智能体协作）
             response = await self.coordinator.process_user_input(
                 user_input=user_input,
-                user_id="user_001",
-                session_id="session_001"
+                context={
+                    "user_id": "user_001",
+                    "session_id": "session_001",
+                    "timestamp": datetime.now().isoformat()
+                }
             )
             
             # 显示响应
-            if response:
-                print(f"🤖 系统: {response}")
+            if response and response.get('status') == 'success':
+                final_response = response.get('response', '')
+                if final_response:
+                    print(f"🤖 系统: {final_response}")
+                else:
+                    print("🤖 系统: 任务已处理完成。")
+                    
+                # 显示协作模式信息
+                mode = response.get('mode', 'unknown')
+                print(f"💡 协作模式: {mode}")
             else:
-                print("🤖 系统: 抱歉，我无法处理您的请求。")
+                error_msg = response.get('error', '未知错误') if response else '协调器无响应'
+                print(f"🤖 系统: 抱歉，处理您的请求时遇到问题: {error_msg}")
                 
         except Exception as e:
             self.logger.error(f"处理用户消息失败: {e}")
             print(f"❌ 处理失败: {e}")
+            
+            # 降级到火山API（备用方案）
+            if self.volcengine_client:
+                print("🔄 尝试使用备用方案...")
+                try:
+                    response = await self._chat_with_volcengine(user_input)
+                    print(f"🤖 系统 (备用): {response}")
+                except Exception as backup_e:
+                    self.logger.error(f"备用方案也失败: {backup_e}")
+                    print("❌ 所有处理方案都失败了，请检查系统状态。")
     
     async def shutdown(self):
         """
@@ -535,10 +605,13 @@ async def main():
     """
     主函数：启动RobotAgent MVP系统
     """
+    print("🚀 开始启动RobotAgent系统...")
     system = None
     try:
         # 创建系统实例
+        print("📦 创建系统实例...")
         system = RobotAgentSystem()
+        print("✅ 系统实例创建成功")
         
         # 启动系统
         if await system.start():

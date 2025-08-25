@@ -3,8 +3,8 @@
 # 智能体基类 (BaseRobotAgent)
 # 基于CAMEL框架的机器人智能体基础实现，融合Eigent和OWL项目的优势
 # 作者: RobotAgent开发团队
-# 版本: 0.0.1 (Initial Release)
-# 更新时间: 2025年8月13日
+# 版本: 0.0.2 (Bug Fix Release)
+# 更新时间: 2025年08月25日
 
 from abc import ABC, abstractmethod
 from typing import Dict, Any, List, Optional, Callable, Union, Tuple
@@ -280,12 +280,8 @@ class BaseRobotAgent(ABC):
             self.logger.addHandler(handler)
         
         # === CAMEL智能体核心初始化 ===
+        # 注意：CAMEL智能体的初始化由子类在适当时机调用_init_camel_agent()方法
         self._camel_agent = None
-        if CAMEL_AVAILABLE:
-            try:
-                self._init_camel_agent()
-            except Exception as e:
-                self.logger.error(f"CAMEL智能体初始化失败: {e}")
         
         # === 注册默认处理器和工具 ===
         self._register_default_handlers()
@@ -428,16 +424,65 @@ class BaseRobotAgent(ABC):
         # 支持工具调用和协作消息的处理。
 
         self._message_handlers = {
-            MessageType.TEXT: self._handle_text_message,  # 添加TEXT类型处理器
+            # 基础消息类型
+            MessageType.TEXT: self._handle_text_message,
+            MessageType.COMMAND: self._handle_command_message,
             MessageType.INSTRUCTION: self._handle_instruction_message,
+            MessageType.RESPONSE: self._handle_response_message,
+            MessageType.ERROR: self._handle_error_message,
+            MessageType.STATUS: self._handle_status_message,
+            
+            # 任务相关消息
             MessageType.TASK: self._handle_task_message,
-            MessageType.TASK_REQUEST: self._handle_task_message,  # 添加TASK_REQUEST处理器
+            MessageType.TASK_REQUEST: self._handle_task_message,
+            MessageType.TASK_RESPONSE: self._handle_task_response_message,
+            MessageType.TASK_UPDATE: self._handle_task_update_message,
+            MessageType.TASK_COMPLETE: self._handle_task_completion,
+            MessageType.TASK_CANCEL: self._handle_task_cancel_message,
+            
+            # 智能体通信消息
+            MessageType.AGENT_REGISTER: self._handle_agent_register_message,
+            MessageType.AGENT_HEARTBEAT: self._handle_heartbeat_message,
+            MessageType.AGENT_STATUS: self._handle_agent_status_message,
+            MessageType.AGENT_SHUTDOWN: self._handle_agent_shutdown_message,
+            MessageType.HEARTBEAT: self._handle_heartbeat_message,
+            
+            # 协作消息类型
+            MessageType.COLLABORATION_REQUEST: self._handle_collaboration_message,
+            MessageType.COLLABORATION_RESPONSE: self._handle_collaboration_response,
+            MessageType.DELEGATION: self._handle_delegation_message,
+            MessageType.FEEDBACK: self._handle_feedback_message,
+            
+            # 工具调用消息
             MessageType.TOOL_CALL: self._handle_tool_call_message,
             MessageType.TOOL_RESULT: self._handle_tool_result_message,
-            MessageType.STATUS: self._handle_status_message,
-            MessageType.ERROR: self._handle_error_message,
-            MessageType.HEARTBEAT: self._handle_heartbeat_message,
-            MessageType.COLLABORATION_REQUEST: self._handle_collaboration_message,
+            MessageType.TOOL_ERROR: self._handle_tool_error_message,
+            
+            # 记忆系统消息
+            MessageType.MEMORY_STORE: self._handle_memory_store_message,
+            MessageType.MEMORY_RETRIEVE: self._handle_memory_retrieve_message,
+            MessageType.MEMORY_UPDATE: self._handle_memory_update_message,
+            MessageType.MEMORY_DELETE: self._handle_memory_delete_message,
+            
+            # 系统控制消息
+            MessageType.SYSTEM_START: self._handle_system_start_message,
+            MessageType.SYSTEM_STOP: self._handle_system_stop_message,
+            MessageType.SYSTEM_CONFIG: self._handle_system_config_message,
+            MessageType.SYSTEM_STATUS: self._handle_system_status_message,
+            MessageType.SHUTDOWN: self._handle_shutdown_message,
+            MessageType.RESTART: self._handle_restart_message,
+            MessageType.CONFIG_UPDATE: self._handle_config_update_message,
+            
+            # 多模态消息
+            MessageType.IMAGE: self._handle_image_message,
+            MessageType.AUDIO: self._handle_audio_message,
+            MessageType.VIDEO: self._handle_video_message,
+            MessageType.FILE: self._handle_file_message,
+            
+            # 学习相关消息
+            MessageType.LEARNING_DATA: self._handle_learning_data_message,
+            MessageType.MODEL_UPDATE: self._handle_model_update_message,
+            MessageType.PATTERN_DISCOVERY: self._handle_pattern_discovery_message,
         }
     
     def _register_default_tools(self):
@@ -528,7 +573,11 @@ class BaseRobotAgent(ABC):
         
         try:
             # 注册到消息总线
-            await self.message_bus.register_agent(self.agent_id, self)
+            self.logger.info(f"正在注册智能体 {self.agent_id} 到消息总线")
+            register_success = await self.message_bus.register_agent(self.agent_id, self)
+            if not register_success:
+                raise RuntimeError(f"智能体 {self.agent_id} 注册到消息总线失败")
+            self.logger.info(f"智能体 {self.agent_id} 成功注册到消息总线")
             
             # 启动消息处理任务
             self._message_task = asyncio.create_task(self._message_processing_loop())
@@ -776,13 +825,18 @@ class BaseRobotAgent(ABC):
         try:
             task_data = message.content
             if isinstance(task_data, dict):
+                # 处理TaskMessage的字段映射
+                description = task_data.get('task_description', task_data.get('description', ''))
+                parameters = task_data.get('task_parameters', task_data.get('parameters', {}))
+                
                 task = TaskDefinition(
                     task_id=task_data.get('task_id', str(uuid.uuid4())),
                     task_type=task_data.get('task_type', 'general'),
-                    description=task_data.get('description', ''),
-                    parameters=task_data.get('parameters', {}),
+                    description=description,
+                    parameters=parameters,
                     priority=task_data.get('priority', 1),
-                    assigned_agent=self.agent_id
+                    assigned_agent=self.agent_id,
+                    created_by=message.sender_id  # 设置任务创建者为消息发送者
                 )
                 
                 # 添加到任务队列
@@ -792,6 +846,7 @@ class BaseRobotAgent(ABC):
                 self.logger.info(f"接收到新任务: {task.task_id}")
                 
                 # 发送确认响应
+                conversation_id = getattr(message, 'conversation_id', None)
                 await self.send_message(
                     recipient=message.sender_id,
                     content={
@@ -799,7 +854,7 @@ class BaseRobotAgent(ABC):
                         'task_id': task.task_id
                     },
                     message_type=MessageType.STATUS,
-                    conversation_id=message.conversation_id
+                    conversation_id=conversation_id
                 )
             else:
                 raise ValueError("任务数据格式无效")
@@ -807,7 +862,7 @@ class BaseRobotAgent(ABC):
         except Exception as e:
             self.logger.error(f"处理任务消息失败: {e}")
             await self.send_message(
-                recipient=message.sender,
+                recipient=message.sender_id,
                 content=f"任务处理失败: {str(e)}",
                 message_type=MessageType.ERROR,
                 conversation_id=message.conversation_id
@@ -1015,6 +1070,19 @@ class BaseRobotAgent(ABC):
             execution_time = time.time() - start_time
             self._update_task_stats(True, execution_time)
             
+            # 发送任务完成响应给创建者
+            if hasattr(task, 'created_by') and task.created_by:
+                await self.send_message(
+                    recipient=task.created_by,
+                    content={
+                        'task_id': task.task_id,
+                        'status': 'success',
+                        'result': result
+                    },
+                    message_type=MessageType.TASK_RESPONSE
+                )
+                self.logger.info(f"发送任务完成响应给 {task.created_by}")
+            
             # 移动到历史记录
             self._task_history.append(task)
             if task.task_id in self._active_tasks:
@@ -1029,6 +1097,19 @@ class BaseRobotAgent(ABC):
             task.updated_at = time.time()
             
             self._update_task_stats(False, 0)
+            
+            # 发送任务失败响应给创建者
+            if hasattr(task, 'created_by') and task.created_by:
+                await self.send_message(
+                    recipient=task.created_by,
+                    content={
+                        'task_id': task.task_id,
+                        'status': 'error',
+                        'error': str(e)
+                    },
+                    message_type=MessageType.TASK_RESPONSE
+                )
+                self.logger.info(f"发送任务失败响应给 {task.created_by}")
             
             self.logger.error(f"任务 {task.task_id} 执行失败: {e}")
             
@@ -1484,6 +1565,261 @@ class BaseRobotAgent(ABC):
             self.logger.error(f"学习过程中出错: {e}")
         finally:
             await self._set_state(AgentState.IDLE)
+    
+    # === 新增的消息处理器方法 ===
+    
+    async def _handle_command_message(self, message: AgentMessage):
+        """处理命令消息"""
+        try:
+            command = message.content
+            self.logger.info(f"执行命令: {command}")
+            result = await self._execute_instruction(command)
+            return result
+        except Exception as e:
+            self.logger.error(f"命令执行失败: {e}")
+            await self._set_state(AgentState.ERROR)
+    
+    async def _handle_response_message(self, message: AgentMessage):
+        """处理响应消息"""
+        try:
+            self.logger.info(f"收到响应: {message.content}")
+        except Exception as e:
+            self.logger.error(f"响应处理失败: {e}")
+    
+    async def _handle_task_response_message(self, message: AgentMessage):
+        """处理任务响应消息"""
+        try:
+            task_response = message.content
+            self.logger.info(f"收到任务响应: {task_response}")
+        except Exception as e:
+            self.logger.error(f"任务响应处理失败: {e}")
+    
+    async def _handle_task_update_message(self, message: AgentMessage):
+        """处理任务更新消息"""
+        try:
+            task_update = message.content
+            self.logger.info(f"任务更新: {task_update}")
+        except Exception as e:
+            self.logger.error(f"任务更新处理失败: {e}")
+    
+    async def _handle_task_complete_message(self, message: AgentMessage):
+        """处理任务完成消息"""
+        try:
+            task_complete = message.content
+            self.logger.info(f"任务完成: {task_complete}")
+        except Exception as e:
+            self.logger.error(f"任务完成处理失败: {e}")
+    
+    async def _handle_task_cancel_message(self, message: AgentMessage):
+        """处理任务取消消息"""
+        try:
+            task_id = message.content.get('task_id')
+            self.logger.info(f"取消任务: {task_id}")
+        except Exception as e:
+            self.logger.error(f"任务取消处理失败: {e}")
+    
+    async def _handle_agent_register_message(self, message: AgentMessage):
+        """处理智能体注册消息"""
+        try:
+            agent_info = message.content
+            self.logger.info(f"智能体注册: {agent_info}")
+        except Exception as e:
+            self.logger.error(f"智能体注册处理失败: {e}")
+    
+    async def _handle_agent_heartbeat_message(self, message: AgentMessage):
+        """处理智能体心跳消息"""
+        try:
+            heartbeat_info = message.content
+            self.logger.debug(f"智能体心跳: {heartbeat_info}")
+        except Exception as e:
+            self.logger.error(f"智能体心跳处理失败: {e}")
+    
+    async def _handle_agent_status_message(self, message: AgentMessage):
+        """处理智能体状态消息"""
+        try:
+            status_info = message.content
+            self.logger.info(f"智能体状态更新: {status_info}")
+        except Exception as e:
+            self.logger.error(f"智能体状态处理失败: {e}")
+    
+    async def _handle_agent_shutdown_message(self, message: AgentMessage):
+        """处理智能体关闭消息"""
+        try:
+            self.logger.info("收到关闭指令")
+            await self.stop()
+        except Exception as e:
+            self.logger.error(f"智能体关闭处理失败: {e}")
+    
+    async def _handle_delegation_message(self, message: AgentMessage):
+        """处理任务委托消息"""
+        try:
+            delegation_info = message.content
+            self.logger.info(f"收到任务委托: {delegation_info}")
+        except Exception as e:
+            self.logger.error(f"任务委托处理失败: {e}")
+    
+    async def _handle_feedback_message(self, message: AgentMessage):
+        """处理反馈消息"""
+        try:
+            feedback = message.content
+            self.logger.info(f"收到反馈: {feedback}")
+        except Exception as e:
+            self.logger.error(f"反馈处理失败: {e}")
+    
+    async def _handle_tool_error_message(self, message: AgentMessage):
+        """处理工具错误消息"""
+        try:
+            tool_error = message.content
+            self.logger.error(f"工具错误: {tool_error}")
+        except Exception as e:
+            self.logger.error(f"工具错误处理失败: {e}")
+    
+    async def _handle_memory_store_message(self, message: AgentMessage):
+        """处理记忆存储消息"""
+        try:
+            memory_data = message.content
+            self.logger.info(f"存储记忆: {memory_data}")
+        except Exception as e:
+            self.logger.error(f"记忆存储处理失败: {e}")
+    
+    async def _handle_memory_retrieve_message(self, message: AgentMessage):
+        """处理记忆检索消息"""
+        try:
+            query = message.content
+            self.logger.info(f"检索记忆: {query}")
+        except Exception as e:
+            self.logger.error(f"记忆检索处理失败: {e}")
+    
+    async def _handle_memory_update_message(self, message: AgentMessage):
+        """处理记忆更新消息"""
+        try:
+            update_data = message.content
+            self.logger.info(f"更新记忆: {update_data}")
+        except Exception as e:
+            self.logger.error(f"记忆更新处理失败: {e}")
+    
+    async def _handle_memory_delete_message(self, message: AgentMessage):
+        """处理记忆删除消息"""
+        try:
+            delete_info = message.content
+            self.logger.info(f"删除记忆: {delete_info}")
+        except Exception as e:
+            self.logger.error(f"记忆删除处理失败: {e}")
+    
+    async def _handle_system_start_message(self, message: AgentMessage):
+        """处理系统启动消息"""
+        try:
+            self.logger.info("收到系统启动指令")
+            await self.start()
+        except Exception as e:
+            self.logger.error(f"系统启动处理失败: {e}")
+    
+    async def _handle_system_stop_message(self, message: AgentMessage):
+        """处理系统停止消息"""
+        try:
+            self.logger.info("收到系统停止指令")
+            await self.stop()
+        except Exception as e:
+            self.logger.error(f"系统停止处理失败: {e}")
+    
+    async def _handle_system_config_message(self, message: AgentMessage):
+        """处理系统配置消息"""
+        try:
+            config_data = message.content
+            self.logger.info(f"更新系统配置: {config_data}")
+        except Exception as e:
+            self.logger.error(f"系统配置处理失败: {e}")
+    
+    async def _handle_system_status_message(self, message: AgentMessage):
+        """处理系统状态消息"""
+        try:
+            self.logger.info("查询系统状态")
+            status = self.get_status()
+            return status
+        except Exception as e:
+            self.logger.error(f"系统状态处理失败: {e}")
+    
+    async def _handle_shutdown_message(self, message: AgentMessage):
+        """处理关闭消息"""
+        try:
+            self.logger.info("收到关闭指令")
+            await self.stop()
+        except Exception as e:
+            self.logger.error(f"关闭处理失败: {e}")
+    
+    async def _handle_restart_message(self, message: AgentMessage):
+        """处理重启消息"""
+        try:
+            self.logger.info("收到重启指令")
+            await self.stop()
+            await self.start()
+        except Exception as e:
+            self.logger.error(f"重启处理失败: {e}")
+    
+    async def _handle_config_update_message(self, message: AgentMessage):
+        """处理配置更新消息"""
+        try:
+            config_update = message.content
+            self.logger.info(f"更新配置: {config_update}")
+        except Exception as e:
+            self.logger.error(f"配置更新处理失败: {e}")
+    
+    async def _handle_image_message(self, message: AgentMessage):
+        """处理图像消息"""
+        try:
+            image_data = message.content
+            self.logger.info(f"处理图像消息: {type(image_data)}")
+        except Exception as e:
+            self.logger.error(f"图像处理失败: {e}")
+    
+    async def _handle_audio_message(self, message: AgentMessage):
+        """处理音频消息"""
+        try:
+            audio_data = message.content
+            self.logger.info(f"处理音频消息: {type(audio_data)}")
+        except Exception as e:
+            self.logger.error(f"音频处理失败: {e}")
+    
+    async def _handle_video_message(self, message: AgentMessage):
+        """处理视频消息"""
+        try:
+            video_data = message.content
+            self.logger.info(f"处理视频消息: {type(video_data)}")
+        except Exception as e:
+            self.logger.error(f"视频处理失败: {e}")
+    
+    async def _handle_file_message(self, message: AgentMessage):
+        """处理文件消息"""
+        try:
+            file_data = message.content
+            self.logger.info(f"处理文件消息: {file_data}")
+        except Exception as e:
+            self.logger.error(f"文件处理失败: {e}")
+    
+    async def _handle_learning_data_message(self, message: AgentMessage):
+        """处理学习数据消息"""
+        try:
+            learning_data = message.content
+            self.logger.info(f"处理学习数据: {learning_data}")
+            await self.learn_from_interaction(learning_data)
+        except Exception as e:
+            self.logger.error(f"学习数据处理失败: {e}")
+    
+    async def _handle_model_update_message(self, message: AgentMessage):
+        """处理模型更新消息"""
+        try:
+            model_data = message.content
+            self.logger.info(f"更新模型: {model_data}")
+        except Exception as e:
+            self.logger.error(f"模型更新处理失败: {e}")
+    
+    async def _handle_pattern_discovery_message(self, message: AgentMessage):
+        """处理模式发现消息"""
+        try:
+            pattern_data = message.content
+            self.logger.info(f"发现模式: {pattern_data}")
+        except Exception as e:
+            self.logger.error(f"模式发现处理失败: {e}")
      
     # === 抽象方法 - 必须由子类实现 ===
     

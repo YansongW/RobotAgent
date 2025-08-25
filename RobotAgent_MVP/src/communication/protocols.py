@@ -3,8 +3,8 @@
 # 通信协议定义 (Communication Protocols)
 # 定义智能体间的消息格式、协议和通信规范
 # 作者: RobotAgent开发团队
-# 版本: 0.0.1 (Initial Release)
-# 更新时间: 2025-08-21
+# 版本: 0.0.2 (Bug Fix Release)
+# 更新时间: 2025年08月25日
 
 # 导入标准库
 import uuid
@@ -15,51 +15,8 @@ from enum import Enum
 from dataclasses import dataclass, field, asdict
 from abc import ABC, abstractmethod
 
-
-class MessageType(Enum):
-    """消息类型枚举"""
-    # 基础消息类型
-    TASK = "task"                           # 任务消息
-    INSTRUCTION = "instruction"             # 指令消息
-    RESPONSE = "response"                   # 响应消息
-    STATUS = "status"                       # 状态消息
-    ERROR = "error"                         # 错误消息
-    
-    # 协作消息类型
-    COLLABORATION_REQUEST = "collaboration_request"   # 协作请求
-    COLLABORATION_RESPONSE = "collaboration_response" # 协作响应
-    DELEGATION = "delegation"               # 任务委托
-    FEEDBACK = "feedback"                   # 反馈消息
-    
-    # 记忆相关消息
-    MEMORY_STORE = "memory_store"           # 记忆存储
-    MEMORY_RETRIEVE = "memory_retrieve"     # 记忆检索
-    MEMORY_UPDATE = "memory_update"         # 记忆更新
-    MEMORY_DELETE = "memory_delete"         # 记忆删除
-    
-    # 系统消息类型
-    HEARTBEAT = "heartbeat"                 # 心跳消息
-    SHUTDOWN = "shutdown"                   # 关闭消息
-    RESTART = "restart"                     # 重启消息
-    CONFIG_UPDATE = "config_update"         # 配置更新
-    
-    # 工具相关消息
-    TOOL_CALL = "tool_call"                 # 工具调用
-    TOOL_RESULT = "tool_result"             # 工具结果
-    TOOL_ERROR = "tool_error"               # 工具错误
-    
-    # 学习相关消息
-    LEARNING_DATA = "learning_data"         # 学习数据
-    MODEL_UPDATE = "model_update"           # 模型更新
-    PATTERN_DISCOVERY = "pattern_discovery" # 模式发现
-
-
-class MessagePriority(Enum):
-    """消息优先级枚举"""
-    CRITICAL = "critical"   # 关键消息（系统错误、紧急停止等）
-    HIGH = "high"           # 高优先级（重要任务、错误处理等）
-    MEDIUM = "medium"       # 中等优先级（普通任务、状态更新等）
-    LOW = "low"             # 低优先级（日志、统计信息等）
+# 导入统一的消息类型定义
+from config import MessageType, MessagePriority
 
 
 class CollaborationMode(Enum):

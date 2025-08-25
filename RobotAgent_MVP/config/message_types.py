@@ -48,6 +48,8 @@ class MessageType(Enum):
     # 协作消息类型
     COLLABORATION_REQUEST = "collaboration_request"   # 协作请求
     COLLABORATION_RESPONSE = "collaboration_response" # 协作响应
+    DELEGATION = "delegation"               # 任务委托
+    FEEDBACK = "feedback"                   # 反馈消息
     
     # 工具调用消息
     TOOL_CALL = "tool_call"         # 工具调用
@@ -65,12 +67,20 @@ class MessageType(Enum):
     SYSTEM_STOP = "system_stop"     # 系统停止
     SYSTEM_CONFIG = "system_config" # 系统配置
     SYSTEM_STATUS = "system_status" # 系统状态
+    SHUTDOWN = "shutdown"           # 关闭消息
+    RESTART = "restart"             # 重启消息
+    CONFIG_UPDATE = "config_update" # 配置更新
     
     # 多模态消息
     IMAGE = "image"                 # 图像消息
     AUDIO = "audio"                 # 音频消息
     VIDEO = "video"                 # 视频消息
     FILE = "file"                   # 文件消息
+    
+    # 学习相关消息
+    LEARNING_DATA = "learning_data"         # 学习数据
+    MODEL_UPDATE = "model_update"           # 模型更新
+    PATTERN_DISCOVERY = "pattern_discovery" # 模式发现
 
 
 class MessagePriority(Enum):
@@ -78,12 +88,10 @@ class MessagePriority(Enum):
     
     定义消息处理的优先级，用于消息队列排序
     """
-    LOW = 1         # 低优先级
-    NORMAL = 2      # 普通优先级
-    MEDIUM = 3      # 中等优先级
-    HIGH = 4        # 高优先级
-    URGENT = 5      # 紧急优先级
-    CRITICAL = 6    # 关键优先级
+    LOW = "low"             # 低优先级
+    MEDIUM = "medium"       # 中等优先级
+    HIGH = "high"           # 高优先级
+    CRITICAL = "critical"   # 关键优先级
 
 
 class MessageStatus(Enum):
@@ -171,7 +179,7 @@ class BaseMessage:
     """
     message_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     message_type: MessageType = MessageType.TEXT
-    priority: MessagePriority = MessagePriority.NORMAL
+    priority: MessagePriority = MessagePriority.MEDIUM
     status: MessageStatus = MessageStatus.PENDING
     timestamp: datetime = field(default_factory=datetime.now)
     sender_id: Optional[str] = None
@@ -286,6 +294,7 @@ class TaskMessage(BaseMessage):
     assigned_agent: Optional[str] = None
     dependencies: List[str] = field(default_factory=list)
     deadline: Optional[datetime] = None
+    conversation_id: Optional[str] = None
     
     def update_status(self, status: TaskStatus, result: Optional[Any] = None, 
                      error: Optional[str] = None) -> None:
@@ -625,7 +634,7 @@ class MessageProtocol(ABC):
 # 消息创建工厂函数
 def create_agent_message(sender_id: str, receiver_id: str, content: Any,
                         message_type: MessageType = MessageType.TEXT,
-                        priority: MessagePriority = MessagePriority.NORMAL,
+                        priority: MessagePriority = MessagePriority.MEDIUM,
                         **kwargs) -> AgentMessage:
     """创建智能体消息
     
@@ -652,7 +661,7 @@ def create_agent_message(sender_id: str, receiver_id: str, content: Any,
 
 def create_task_message(task_type: str, task_params: Dict[str, Any] = None,
                        assigned_agent: str = None,
-                       priority: MessagePriority = MessagePriority.NORMAL,
+                       priority: MessagePriority = MessagePriority.MEDIUM,
                        **kwargs) -> TaskMessage:
     """创建任务消息
     

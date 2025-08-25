@@ -13,6 +13,14 @@ import logging
 from pathlib import Path
 from typing import Dict, Any, Optional, Union
 
+# 导入环境变量加载器
+try:
+    from dotenv import load_dotenv
+    DOTENV_AVAILABLE = True
+except ImportError:
+    DOTENV_AVAILABLE = False
+    logging.warning("python-dotenv未安装，无法从.env文件加载环境变量")
+
 # 导入项目基础组件
 try:
     from cryptography.fernet import Fernet
@@ -89,9 +97,36 @@ class ConfigLoader:
         # 初始化日志记录器
         self.logger = logging.getLogger(__name__)
         
+        # 加载环境变量文件
+        self._load_env_file()
+        
         # 初始化加密组件
         self._init_encryption()
-    
+
+    def _load_env_file(self) -> None:
+        """
+        加载.env文件中的环境变量
+        
+        从项目根目录查找.env文件并加载其中的环境变量。
+        如果文件不存在或加载失败，会记录警告但不会中断程序运行。
+        """
+        if not DOTENV_AVAILABLE:
+            return
+            
+        try:
+            # 获取项目根目录
+            project_root = self.config_dir.parent
+            env_file = project_root / ".env"
+            
+            if env_file.exists():
+                load_dotenv(env_file)
+                self.logger.info(f"已加载环境变量文件: {env_file}")
+            else:
+                self.logger.info("未找到.env文件，将使用系统环境变量")
+                
+        except Exception as e:
+            self.logger.warning(f"加载.env文件失败: {e}")
+
     def _init_encryption(self) -> None:
         """
         初始化加密组件
@@ -160,8 +195,9 @@ class ConfigLoader:
         """
         应用环境变量覆盖
         
-        使用环境变量覆盖配置文件中的值，支持嵌套配置。
+        使用环境变量覆盖配置文件中的值，支持嵌套配置和占位符替换。
         环境变量格式: {PREFIX}_{SECTION}_{KEY}
+        占位符格式: ${ENV_VAR_NAME}
         
         Args:
             config: 原始配置字典
@@ -170,6 +206,10 @@ class ConfigLoader:
         Returns:
             应用环境变量覆盖后的配置字典
         """
+        # 首先替换配置中的环境变量占位符
+        config = self._replace_env_placeholders(config)
+        
+        # 然后应用环境变量覆盖
         for key, value in os.environ.items():
             if key.startswith(f"{prefix}_"):
                 # 解析环境变量键
@@ -186,6 +226,32 @@ class ConfigLoader:
                 self.logger.debug(f"环境变量覆盖: {key} -> {config_path}")
         
         return config
+    
+    def _replace_env_placeholders(self, config: Any) -> Any:
+        """
+        递归替换配置中的环境变量占位符
+        
+        Args:
+            config: 配置值（可能是字典、列表或字符串）
+            
+        Returns:
+            替换占位符后的配置值
+        """
+        if isinstance(config, dict):
+            return {key: self._replace_env_placeholders(value) for key, value in config.items()}
+        elif isinstance(config, list):
+            return [self._replace_env_placeholders(item) for item in config]
+        elif isinstance(config, str) and config.startswith('${') and config.endswith('}'):
+            # 提取环境变量名
+            env_var = config[2:-1]
+            env_value = os.getenv(env_var)
+            if env_value is not None:
+                return env_value
+            else:
+                self.logger.warning(f"环境变量 {env_var} 未设置，保持原值: {config}")
+                return config
+        else:
+            return config
     
     def get_volcengine_config(self) -> Dict[str, Any]:
         """
@@ -212,8 +278,9 @@ class ConfigLoader:
                 raise ValueError(f"火山方舟配置缺少必需项: {key}")
         
         # 验证配置值
-        if not volcengine_config['api_key']:
-            raise ValueError("火山方舟API密钥不能为空")
+        api_key = volcengine_config['api_key']
+        if not api_key or api_key.startswith('${'):
+            raise ValueError("火山方舟API密钥未正确配置，请设置VOLCENGINE_API_KEY环境变量")
         
         if not volcengine_config['base_url'].startswith(('http://', 'https://')):
             raise ValueError("火山方舟基础URL格式无效")
@@ -363,4 +430,18 @@ class ConfigLoader:
 
 # 全局配置加载器实例
 # 提供便捷的全局访问接口
-config_loader = ConfigLoader()
+_config_loader_instance = None
+
+def get_config_loader() -> ConfigLoader:
+    """获取全局配置加载器实例（延迟初始化）"""
+    global _config_loader_instance
+    if _config_loader_instance is None:
+        _config_loader_instance = ConfigLoader()
+    return _config_loader_instance
+
+# 为了向后兼容，保留config_loader属性
+class _ConfigLoaderProxy:
+    def __getattr__(self, name):
+        return getattr(get_config_loader(), name)
+
+config_loader = _ConfigLoaderProxy()

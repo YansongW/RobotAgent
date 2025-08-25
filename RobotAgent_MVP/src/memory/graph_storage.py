@@ -3,8 +3,8 @@
 # 知识图谱存储管理器 (Knowledge Graph Storage Manager)
 # 负责知识图谱的持久化存储和向量检索功能
 # 作者: RobotAgent开发团队
-# 版本: 0.0.1 (Initial Release)
-# 更新时间: 2025-08-21
+# 版本: 0.0.2 (Bug Fix Release)
+# 更新时间: 2025年08月25日
 
 import os
 import json

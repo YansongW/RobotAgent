@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 
 # 智能体协调器 (Agent Coordinator)
-# 负责管理和协调ChatAgent、ActionAgent、MemoryAgent之间的协作
+# 负责管理和协调RobotChatAgent、ActionAgent、MemoryAgent之间的协作
 # 作者: RobotAgent开发团队
-# 版本: 0.0.1 (Initial Release)
-# 更新时间: 2025-08-19
+# 版本: 0.0.2 (Bug Fix Release)
+# 更新时间: 2025-08-25
 
 # 导入标准库
 import asyncio
@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from enum import Enum
 
 # 导入项目基础组件
-from .chat_agent import ChatAgent
+from .chat_agent import RobotChatAgent
 from .action_agent import ActionAgent
 from .memory_agent import MemoryAgent
 from config import (
@@ -76,7 +76,7 @@ class AgentCoordinator:
     """
     智能体协调器 (Agent Coordinator)
     
-    负责协调ChatAgent、ActionAgent和MemoryAgent之间的协作，专注于：
+    负责协调RobotChatAgent、ActionAgent和MemoryAgent之间的协作，专注于：
     1. 统一的任务分发和路由管理
     2. 多智能体协作模式控制
     3. 结果整合和状态同步
@@ -87,7 +87,7 @@ class AgentCoordinator:
     
     Attributes:
         message_bus (MessageBus): 消息总线实例
-        chat_agent (ChatAgent): 对话智能体实例
+        chat_agent (RobotChatAgent): 对话智能体实例
         action_agent (ActionAgent): 动作智能体实例
         memory_agent (MemoryAgent): 记忆智能体实例
         active_tasks (Dict): 当前活跃任务字典
@@ -124,7 +124,7 @@ class AgentCoordinator:
         self.message_bus: MessageBus = get_message_bus()
         
         # 初始化智能体实例（延迟创建）
-        self.chat_agent: Optional[ChatAgent] = None
+        self.chat_agent: Optional[RobotChatAgent] = None
         self.action_agent: Optional[ActionAgent] = None
         self.memory_agent: Optional[MemoryAgent] = None
         
@@ -161,8 +161,11 @@ class AgentCoordinator:
             # 启动消息总线服务
             await self.message_bus.start()
             
+            # 注册协调器到消息总线
+            await self.message_bus.register_agent("coordinator", self)
+            
             # 创建对话智能体实例
-            self.chat_agent = ChatAgent(
+            self.chat_agent = RobotChatAgent(
                 agent_id="chat_agent",
                 config=self.config.get('chat_agent', {})
             )
@@ -193,6 +196,17 @@ class AgentCoordinator:
             self.logger.error(f"协调器初始化失败: {e}")
             raise
     
+    async def receive_message(self, message):
+        """接收消息的回调方法
+        
+        消息总线注册时需要这个方法来接收消息
+        """
+        self.logger.info(f"协调器收到消息: {message.message_type} from {message.sender_id}")
+        # 将收到的消息存储到响应队列中，供_wait_for_response方法使用
+        if not hasattr(self, '_response_queue'):
+            self._response_queue = asyncio.Queue()
+        await self._response_queue.put(message)
+    
     async def shutdown(self):
         """关闭协调器和所有智能体"""
         try:
@@ -206,6 +220,9 @@ class AgentCoordinator:
                 await self.action_agent.stop()
             if self.memory_agent:
                 await self.memory_agent.stop()
+            
+            # 取消注册协调器
+            await self.message_bus.unregister_agent("coordinator")
             
             # 停止消息总线
             await self.message_bus.stop()
@@ -279,7 +296,7 @@ class AgentCoordinator:
         """顺序协作模式"""
         self.logger.info(f"开始顺序协作处理任务: {task.task_id}")
         
-        # 1. ChatAgent 理解和分析用户输入
+        # 1. RobotChatAgent 理解和分析用户输入
         chat_message = create_task_message(
             sender_id="coordinator",
             receiver_id="chat_agent",
@@ -295,7 +312,7 @@ class AgentCoordinator:
         chat_response = await self._wait_for_response("chat_agent", timeout=30)
         
         if not chat_response or chat_response.get('status') != 'success':
-            raise RuntimeError("ChatAgent处理失败")
+            raise RuntimeError("RobotChatAgent处理失败")
         
         # 2. 根据分析结果决定是否需要ActionAgent
         analysis_result = chat_response.get('data', {})
@@ -332,7 +349,7 @@ class AgentCoordinator:
         
         await self.message_bus.send_message(memory_message)
         
-        # 4. ChatAgent 生成最终响应
+        # 4. RobotChatAgent 生成最终响应
         response_message = create_task_message(
             sender_id="coordinator",
             receiver_id="chat_agent",
@@ -363,7 +380,7 @@ class AgentCoordinator:
         # 并行发送任务给多个智能体
         tasks = []
         
-        # ChatAgent 分析
+        # RobotChatAgent 分析
         chat_task = asyncio.create_task(
             self._send_and_wait(
                 "chat_agent",
@@ -437,7 +454,7 @@ class AgentCoordinator:
         if memory_result and memory_result.get('status') == 'success':
             pipeline_data['retrieved_memories'] = memory_result.get('data', {})
         
-        # 阶段2: ChatAgent 分析（包含记忆信息）
+        # 阶段2: RobotChatAgent 分析（包含记忆信息）
         chat_result = await self._send_and_wait(
             "chat_agent",
             create_task_message(
@@ -470,7 +487,7 @@ class AgentCoordinator:
             if action_result and action_result.get('status') == 'success':
                 pipeline_data['action_result'] = action_result.get('data', {})
         
-        # 阶段4: ChatAgent 生成最终响应
+        # 阶段4: RobotChatAgent 生成最终响应
         final_result = await self._send_and_wait(
             "chat_agent",
             create_task_message(
@@ -496,7 +513,7 @@ class AgentCoordinator:
         """自适应协作模式"""
         self.logger.info(f"开始自适应协作处理任务: {task.task_id}")
         
-        # 首先让ChatAgent分析任务复杂度和需求
+        # 首先让RobotChatAgent分析任务复杂度和需求
         analysis_result = await self._send_and_wait(
             "chat_agent",
             create_task_message(
@@ -522,7 +539,7 @@ class AgentCoordinator:
         
         # 根据分析结果选择最适合的协作模式
         if complexity == 'low' and not requires_action:
-            # 简单任务，直接ChatAgent处理
+            # 简单任务，直接RobotChatAgent处理
             return await self._process_simple_chat(task)
         elif complexity == 'high' or (requires_action and requires_memory):
             # 复杂任务，使用流水线模式
@@ -570,15 +587,19 @@ class AgentCoordinator:
         """等待智能体响应"""
         start_time = datetime.now()
         
+        # 确保响应队列存在
+        if not hasattr(self, '_response_queue'):
+            self._response_queue = asyncio.Queue()
+        
         while (datetime.now() - start_time).total_seconds() < timeout:
             try:
-                # 从消息总线接收响应
-                response = await self.message_bus.receive_message(
-                    "coordinator", 
+                # 从响应队列接收响应
+                response = await asyncio.wait_for(
+                    self._response_queue.get(),
                     timeout=1.0
                 )
                 
-                if response and response.sender == agent_id:
+                if response and response.sender_id == agent_id:
                     if isinstance(response, ResponseMessage):
                         return {
                             'status': response.status,
@@ -590,6 +611,9 @@ class AgentCoordinator:
                             'status': 'success',
                             'data': response.content
                         }
+                else:
+                    # 如果不是期望的发送者，将消息放回队列
+                    await self._response_queue.put(response)
                 
             except asyncio.TimeoutError:
                 continue

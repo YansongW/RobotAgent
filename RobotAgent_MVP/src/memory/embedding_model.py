@@ -3,8 +3,8 @@
 # 嵌入模型管理器 (Embedding Model Manager)
 # 提供统一的文本嵌入服务，支持多种嵌入模型的加载和使用
 # 作者: RobotAgent开发团队
-# 版本: 0.0.1 (Initial Release)
-# 更新时间: 2025-08-21
+# 版本: 0.0.2 (Bug Fix Release)
+# 更新时间: 2025年08月25日
 
 import os
 import logging
