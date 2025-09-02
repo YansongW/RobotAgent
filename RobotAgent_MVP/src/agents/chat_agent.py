@@ -61,30 +61,40 @@ except ImportError:
     CAMEL_AVAILABLE = False
     logging.warning("CAMEL框架未安装，使用模拟实现")
 
-# 导入记忆智能体
-try:
-    # 尝试从当前目录导入memory_agent模块
-    from memory_agent import MemoryAgent, SearchQuery
-    MEMORY_AGENT_AVAILABLE = True
-except ImportError:
+# 记忆智能体模块 - 使用延迟导入避免循环依赖
+MEMORY_AGENT_AVAILABLE = False
+MemoryAgent = None
+SearchQuery = None
+
+def _lazy_import_memory_agent():
+    """延迟导入MemoryAgent以避免循环依赖"""
+    global MEMORY_AGENT_AVAILABLE, MemoryAgent, SearchQuery
+    
+    if MEMORY_AGENT_AVAILABLE:
+        return True
+        
     try:
         # 尝试从完整路径导入
-        from src.agents.memory_agent import MemoryAgent, SearchQuery
+        from src.agents.memory_agent import MemoryAgent as MA, SearchQuery as SQ
+        MemoryAgent = MA
+        SearchQuery = SQ
         MEMORY_AGENT_AVAILABLE = True
+        return True
     except ImportError:
         try:
-            # 尝试从上级目录导入
-            import sys
-            import os
-            sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-            from agents.memory_agent import MemoryAgent, SearchQuery
+            # 尝试从当前目录导入
+            from .memory_agent import MemoryAgent as MA, SearchQuery as SQ
+            MemoryAgent = MA
+            SearchQuery = SQ
             MEMORY_AGENT_AVAILABLE = True
+            return True
         except ImportError:
-            MEMORY_AGENT_AVAILABLE = False
-            logging.warning("MemoryAgent未找到，记忆功能将被禁用。请确保memory_agent.py文件存在于正确的路径中。")
-    # 实现基础的记忆搜索功能
-    @dataclass
-    class SearchQuery:
+            logging.warning("MemoryAgent未找到，记忆功能将被禁用")
+            return False
+
+# 实现基础的记忆搜索功能（备用）
+@dataclass
+class SearchQuery:
         """记忆搜索查询类
         
         提供基础的记忆搜索功能实现,包括:
@@ -217,6 +227,7 @@ class RobotChatAgent(BaseRobotAgent):
         
         # 对话处理组件
         self._response_templates = self._load_response_templates()
+        self._message_analysis_template = self._load_message_analysis_template()
         self._intent_patterns = self._load_intent_patterns()
         self._emotion_keywords = self._load_emotion_keywords()
         
@@ -589,11 +600,14 @@ Please provide appropriate responses based on user input.
         
         设置知识存储、检索和对话记忆管理功能。
         """
-        if MEMORY_AGENT_AVAILABLE and self._knowledge_retrieval_enabled:
+        # 使用延迟导入获取MemoryAgent
+        memory_agent_class = _lazy_import_memory_agent()
+        
+        if memory_agent_class and self._knowledge_retrieval_enabled:
             try:
                 # 初始化MemoryAgent
                 memory_config = self.config.get('memory', {})
-                self._memory_agent = MemoryAgent(
+                self._memory_agent = memory_agent_class(
                     agent_id=f"{self.agent_id}_memory",
                     config=memory_config
                 )
@@ -1242,10 +1256,19 @@ Please provide appropriate responses based on user input.
         return context
     
     async def _analyze_message(self, message: str) -> MessageAnalysis:
-        # 分析用户消息
+        # 分析用户消息 - 基于提示词模板的实现
         # Args: message: 用户消息
         # Returns: MessageAnalysis: 分析结果
         try:
+            # 尝试使用基于提示词的分析方法
+            if self._camel_agent and hasattr(self, '_message_analysis_template'):
+                analysis = await self._analyze_message_with_prompt(message)
+                if analysis:
+                    return analysis
+            
+            # 回退到原有的规则基础方法
+            self.logger.warning("使用回退的规则基础消息分析方法")
+            
             # 意图识别
             intent = await self._recognize_intent(message)
             
@@ -2310,6 +2333,185 @@ Please provide appropriate responses based on user input.
         except Exception as e:
             self.logger.error(f"生成最终响应失败: {e}")
             return "我已经处理了您的请求，如有其他需要请随时告诉我。"
+    
+    def _load_message_analysis_template(self) -> Optional[Dict[str, Any]]:
+        """
+        加载消息分析提示词模板
+        
+        Returns:
+            Optional[Dict[str, Any]]: 消息分析模板，如果加载失败则返回None
+        """
+        try:
+            template_path = os.path.join(
+                self.config.get('config_dir', 'config'),
+                'prompts',
+                'message_analysis_tool_template.json'
+            )
+            
+            if os.path.exists(template_path):
+                with open(template_path, 'r', encoding='utf-8') as f:
+                    template = json.load(f)
+                    self.logger.info(f"成功加载消息分析模板: {template_path}")
+                    return template
+            else:
+                self.logger.warning(f"消息分析模板文件不存在: {template_path}")
+                return None
+                
+        except Exception as e:
+            self.logger.error(f"加载消息分析模板失败: {e}")
+            return None
+    
+    async def _analyze_message_with_prompt(self, message: str) -> Optional[MessageAnalysis]:
+        """
+        使用提示词模板分析消息
+        
+        Args:
+            message: 用户消息
+            
+        Returns:
+            Optional[MessageAnalysis]: 分析结果，如果失败则返回None
+        """
+        if not self._message_analysis_template or not self._camel_agent:
+            return None
+            
+        try:
+            # 构建分析提示词
+            system_prompt = self._message_analysis_template.get('system_prompt', '')
+            user_prompt_template = self._message_analysis_template.get('user_prompt', '')
+            
+            # 格式化用户提示词
+            user_prompt = user_prompt_template.format(
+                message=message,
+                timestamp=datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            )
+            
+            # 构建完整提示词
+            full_prompt = f"{system_prompt}\n\n{user_prompt}"
+            
+            # 使用CAMEL智能体进行分析
+            # 创建临时上下文用于分析
+            temp_context = ConversationContext(
+                conversation_id="temp_analysis",
+                user_id="system",
+                start_time=datetime.now(),
+                last_activity=datetime.now()
+            )
+            temp_context.message_history.append({
+                "role": "user",
+                "content": message,
+                "timestamp": datetime.now()
+            })
+            
+            response = await self._generate_camel_response(
+                temp_context,
+                full_prompt
+            )
+            
+            # 解析响应结果
+            analysis_result = self._parse_analysis_response(response)
+            
+            if analysis_result:
+                self.logger.debug(f"基于提示词的消息分析成功: {analysis_result}")
+                return analysis_result
+            else:
+                self.logger.warning("提示词分析结果解析失败")
+                return None
+                
+        except Exception as e:
+            self.logger.error(f"基于提示词的消息分析失败: {e}")
+            return None
+    
+    def _parse_analysis_response(self, response: str) -> Optional[MessageAnalysis]:
+        """
+        解析分析响应结果
+        
+        Args:
+            response: CAMEL智能体的响应
+            
+        Returns:
+            Optional[MessageAnalysis]: 解析后的分析结果
+        """
+        try:
+            # 尝试解析JSON格式的响应
+            if response.strip().startswith('{'):
+                result = json.loads(response)
+            else:
+                # 如果不是JSON格式，尝试从文本中提取信息
+                result = self._extract_analysis_from_text(response)
+            
+            # 构建MessageAnalysis对象
+            intent_str = result.get('intent', 'UNKNOWN').upper()
+            emotion_str = result.get('emotion', 'NEUTRAL').upper()
+            
+            # 安全地转换枚举值
+            try:
+                intent = IntentType[intent_str] if intent_str in IntentType.__members__ else IntentType.UNKNOWN
+            except (KeyError, AttributeError):
+                intent = IntentType.UNKNOWN
+                
+            try:
+                emotion = EmotionType[emotion_str] if emotion_str in EmotionType.__members__ else EmotionType.NEUTRAL
+            except (KeyError, AttributeError):
+                emotion = EmotionType.NEUTRAL
+            
+            return MessageAnalysis(
+                intent=intent,
+                emotion=emotion,
+                confidence=float(result.get('confidence', 0.5)),
+                key_entities=result.get('entities', []),
+                topics=result.get('topics', ['通用']),
+                requires_clarification=result.get('requires_clarification', False),
+                suggested_actions=result.get('suggested_actions', [])
+            )
+            
+        except Exception as e:
+            self.logger.error(f"解析分析响应失败: {e}")
+            return None
+    
+    def _extract_analysis_from_text(self, text: str) -> Dict[str, Any]:
+        """
+        从文本响应中提取分析信息
+        
+        Args:
+            text: 文本响应
+            
+        Returns:
+            Dict[str, Any]: 提取的分析信息
+        """
+        result = {
+            'intent': 'UNKNOWN',
+            'emotion': 'NEUTRAL',
+            'confidence': 0.5,
+            'entities': [],
+            'topics': ['通用'],
+            'requires_clarification': False,
+            'suggested_actions': []
+        }
+        
+        # 简单的文本解析逻辑
+        text_lower = text.lower()
+        
+        # 提取意图
+        if '问题' in text_lower or 'question' in text_lower:
+            result['intent'] = 'QUESTION'
+        elif '请求' in text_lower or 'request' in text_lower:
+            result['intent'] = 'REQUEST'
+        elif '命令' in text_lower or 'command' in text_lower:
+            result['intent'] = 'COMMAND'
+        elif '对话' in text_lower or 'conversation' in text_lower:
+            result['intent'] = 'CONVERSATION'
+        
+        # 提取情感
+        if '积极' in text_lower or 'positive' in text_lower:
+            result['emotion'] = 'POSITIVE'
+        elif '消极' in text_lower or 'negative' in text_lower:
+            result['emotion'] = 'NEGATIVE'
+        elif '兴奋' in text_lower or 'excited' in text_lower:
+            result['emotion'] = 'EXCITED'
+        elif '愤怒' in text_lower or 'angry' in text_lower:
+            result['emotion'] = 'ANGRY'
+        
+        return result
 
 
 # 模块级别的工具函数
@@ -2373,6 +2575,8 @@ class MessageAnalysisError(ChatAgentError):
 class ResponseGenerationError(ChatAgentError):
     # 回复生成异常
     pass
+
+
 
 
 # 导出的公共接口

@@ -34,7 +34,18 @@ from src.communication.message_bus import get_message_bus
 # 导入记忆管理组件
 from src.memory.graph_storage import GraphStorage
 from src.memory.knowledge_retriever import KnowledgeRetriever, RetrievalMode
-from src.memory import embedding_model
+# 延迟导入embedding_model以避免循环导入
+# from src.memory import embedding_model
+
+def _lazy_import_embedding_model():
+    """延迟导入embedding_model模块以避免循环导入"""
+    try:
+        from src.memory import embedding_model
+        return embedding_model
+    except ImportError as e:
+        import logging
+        logging.warning(f"无法导入embedding_model: {e}")
+        return None
 
 # 导入CAMEL框架组件
 try:
@@ -395,7 +406,12 @@ class MemoryAgent(BaseRobotAgent):
             # 将内容转换为字符串
             content_str = str(content)
             
-            # 使用embedding模型生成向量
+            # 使用延迟导入的embedding模型生成向量
+            embedding_model = _lazy_import_embedding_model()
+            if embedding_model is None:
+                self.logger.error("embedding_model模块不可用")
+                return [0.0] * 768  # 返回默认维度的零向量
+            
             embedding = embedding_model.encode(content_str)
             
             # 确保返回的是列表格式
@@ -1399,6 +1415,265 @@ class MemoryAgent(BaseRobotAgent):
                 "error": f"Unknown task type: {task_type}"
             }
     
+    # 重写基类的记忆处理方法
+    async def _handle_memory_store_message(self, message: AgentMessage):
+        """处理记忆存储消息"""
+        try:
+            self.logger.info(f"收到记忆存储请求: {message.sender_id}")
+            
+            # 解析消息内容
+            if isinstance(message.content, str):
+                memory_data = json.loads(message.content)
+            else:
+                memory_data = message.content
+            
+            # 提取存储参数
+            content = memory_data.get('content') or memory_data.get('memory_data', {})
+            memory_type = MemoryType(memory_data.get('memory_type', 'short_term'))
+            source_agent = memory_data.get('source_agent', message.sender_id)
+            tags = memory_data.get('tags', ['auto_stored'])
+            priority = MemoryPriority(memory_data.get('priority', 2))
+            metadata = memory_data.get('metadata', {})
+            
+            # 存储记忆
+            memory_id = await self.store_memory(
+                content=content,
+                memory_type=memory_type,
+                source_agent=source_agent,
+                tags=tags,
+                priority=priority,
+                metadata=metadata
+            )
+            
+            # 发送响应消息
+            response = AgentMessage(
+                message_id=str(uuid.uuid4()),
+                sender_id=self.agent_id,
+                receiver_id=message.sender_id,
+                message_type=MessageType.RESPONSE,
+                content=json.dumps({
+                    "success": True,
+                    "memory_id": memory_id,
+                    "message": "记忆存储成功"
+                }),
+                timestamp=datetime.now(),
+                correlation_id=message.message_id
+            )
+            
+            await self.send_message(response)
+            self.logger.info(f"记忆存储成功: {memory_id}")
+            
+        except Exception as e:
+            self.logger.error(f"记忆存储处理失败: {e}")
+            
+            # 发送错误响应
+            error_response = AgentMessage(
+                message_id=str(uuid.uuid4()),
+                sender_id=self.agent_id,
+                receiver_id=message.sender_id,
+                message_type=MessageType.RESPONSE,
+                content=json.dumps({
+                    "success": False,
+                    "error": str(e),
+                    "message": "记忆存储失败"
+                }),
+                timestamp=datetime.now(),
+                correlation_id=message.message_id
+            )
+            
+            await self.send_message(error_response)
+    
+    async def _handle_memory_retrieve_message(self, message: AgentMessage):
+        """处理记忆检索消息"""
+        try:
+            self.logger.info(f"收到记忆检索请求: {message.sender_id}")
+            
+            # 解析消息内容
+            if isinstance(message.content, str):
+                query_data = json.loads(message.content)
+            else:
+                query_data = message.content
+            
+            # 构建搜索查询
+            search_query = SearchQuery(
+                query_text=query_data.get('query_text', ''),
+                memory_types=[MemoryType(t) for t in query_data.get('memory_types', [])] if query_data.get('memory_types') else None,
+                tags=query_data.get('tags'),
+                similarity_threshold=query_data.get('similarity_threshold', 0.7),
+                max_results=query_data.get('max_results', 10)
+            )
+            
+            # 检索记忆
+            results = await self.retrieve_memory(search_query)
+            
+            # 格式化结果
+            formatted_results = []
+            for result in results:
+                formatted_results.append({
+                    "memory_id": result.memory_item.id,
+                    "content": result.memory_item.content,
+                    "memory_type": result.memory_item.memory_type.value,
+                    "tags": result.memory_item.tags,
+                    "similarity_score": result.similarity_score,
+                    "relevance_score": result.relevance_score,
+                    "created_at": result.memory_item.created_at.isoformat(),
+                    "source_agent": result.memory_item.source_agent
+                })
+            
+            # 发送响应消息
+            response = AgentMessage(
+                message_id=str(uuid.uuid4()),
+                sender_id=self.agent_id,
+                receiver_id=message.sender_id,
+                message_type=MessageType.RESPONSE,
+                content=json.dumps({
+                    "success": True,
+                    "results": formatted_results,
+                    "total_count": len(formatted_results),
+                    "message": "记忆检索成功"
+                }),
+                timestamp=datetime.now(),
+                correlation_id=message.message_id
+            )
+            
+            await self.send_message(response)
+            self.logger.info(f"记忆检索成功，返回 {len(formatted_results)} 条结果")
+            
+        except Exception as e:
+            self.logger.error(f"记忆检索处理失败: {e}")
+            
+            # 发送错误响应
+            error_response = AgentMessage(
+                message_id=str(uuid.uuid4()),
+                sender_id=self.agent_id,
+                receiver_id=message.sender_id,
+                message_type=MessageType.RESPONSE,
+                content=json.dumps({
+                    "success": False,
+                    "error": str(e),
+                    "message": "记忆检索失败"
+                }),
+                timestamp=datetime.now(),
+                correlation_id=message.message_id
+            )
+            
+            await self.send_message(error_response)
+    
+    async def _handle_memory_update_message(self, message: AgentMessage):
+        """处理记忆更新消息"""
+        try:
+            self.logger.info(f"收到记忆更新请求: {message.sender_id}")
+            
+            # 解析消息内容
+            if isinstance(message.content, str):
+                update_data = json.loads(message.content)
+            else:
+                update_data = message.content
+            
+            memory_id = update_data.get('memory_id')
+            updates = update_data.get('updates', {})
+            
+            if not memory_id:
+                raise ValueError("缺少memory_id参数")
+            
+            # 更新记忆
+            success = await self.update_memory(memory_id, updates)
+            
+            # 发送响应消息
+            response = AgentMessage(
+                message_id=str(uuid.uuid4()),
+                sender_id=self.agent_id,
+                receiver_id=message.sender_id,
+                message_type=MessageType.RESPONSE,
+                content=json.dumps({
+                    "success": success,
+                    "memory_id": memory_id,
+                    "message": "记忆更新成功" if success else "记忆更新失败"
+                }),
+                timestamp=datetime.now(),
+                correlation_id=message.message_id
+            )
+            
+            await self.send_message(response)
+            self.logger.info(f"记忆更新{'成功' if success else '失败'}: {memory_id}")
+            
+        except Exception as e:
+            self.logger.error(f"记忆更新处理失败: {e}")
+            
+            # 发送错误响应
+            error_response = AgentMessage(
+                message_id=str(uuid.uuid4()),
+                sender_id=self.agent_id,
+                receiver_id=message.sender_id,
+                message_type=MessageType.RESPONSE,
+                content=json.dumps({
+                    "success": False,
+                    "error": str(e),
+                    "message": "记忆更新失败"
+                }),
+                timestamp=datetime.now(),
+                correlation_id=message.message_id
+            )
+            
+            await self.send_message(error_response)
+    
+    async def _handle_memory_delete_message(self, message: AgentMessage):
+        """处理记忆删除消息"""
+        try:
+            self.logger.info(f"收到记忆删除请求: {message.sender_id}")
+            
+            # 解析消息内容
+            if isinstance(message.content, str):
+                delete_data = json.loads(message.content)
+            else:
+                delete_data = message.content
+            
+            memory_id = delete_data.get('memory_id')
+            
+            if not memory_id:
+                raise ValueError("缺少memory_id参数")
+            
+            # 删除记忆
+            success = await self.delete_memory(memory_id)
+            
+            # 发送响应消息
+            response = AgentMessage(
+                message_id=str(uuid.uuid4()),
+                sender_id=self.agent_id,
+                receiver_id=message.sender_id,
+                message_type=MessageType.RESPONSE,
+                content=json.dumps({
+                    "success": success,
+                    "memory_id": memory_id,
+                    "message": "记忆删除成功" if success else "记忆删除失败"
+                }),
+                timestamp=datetime.now(),
+                correlation_id=message.message_id
+            )
+            
+            await self.send_message(response)
+            self.logger.info(f"记忆删除{'成功' if success else '失败'}: {memory_id}")
+            
+        except Exception as e:
+            self.logger.error(f"记忆删除处理失败: {e}")
+            
+            # 发送错误响应
+            error_response = AgentMessage(
+                message_id=str(uuid.uuid4()),
+                sender_id=self.agent_id,
+                receiver_id=message.sender_id,
+                message_type=MessageType.RESPONSE,
+                content=json.dumps({
+                    "success": False,
+                    "error": str(e),
+                    "message": "记忆删除失败"
+                }),
+                timestamp=datetime.now(),
+                correlation_id=message.message_id
+            )
+            
+            await self.send_message(error_response)
+
     async def cleanup(self):
         """清理资源"""
         # 保存记忆数据

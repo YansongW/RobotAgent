@@ -59,6 +59,7 @@ class AgentMessage:
     priority: MessagePriority = MessagePriority.MEDIUM
     metadata: Dict[str, Any] = field(default_factory=dict)
     correlation_id: Optional[str] = None  # 用于关联请求和响应
+    conversation_id: Optional[str] = None  # 对话标识符
     
     def to_dict(self) -> Dict[str, Any]:
         """转换为字典格式"""
@@ -105,8 +106,22 @@ class TaskMessage(AgentMessage):
     expected_output: Optional[str] = None
     deadline: Optional[datetime] = None
     dependencies: List[str] = field(default_factory=list)
+    task_definition: Optional[Any] = None  # 添加task_definition属性
     
     def __post_init__(self):
+        # 创建TaskDefinition对象
+        if not self.task_definition:
+            from ..agents.base_agent import TaskDefinition
+            self.task_definition = TaskDefinition(
+                task_id=self.task_id,
+                task_type=self.task_description,  # 使用task_description作为task_type
+                description=self.task_description,
+                parameters=self.task_parameters,
+                priority=1,  # 默认优先级
+                assigned_agent=self.receiver_id,
+                created_by=self.sender_id
+            )
+        
         # 将任务相关信息添加到content中
         self.content.update({
             "task_id": self.task_id,
@@ -481,14 +496,16 @@ class MessageRouter:
 
 def create_task_message(sender_id: str, receiver_id: str, task_description: str, 
                        task_parameters: Optional[Dict[str, Any]] = None,
-                       priority: MessagePriority = MessagePriority.MEDIUM) -> TaskMessage:
+                       priority: MessagePriority = MessagePriority.MEDIUM,
+                       conversation_id: Optional[str] = None) -> TaskMessage:
     """创建任务消息"""
     return TaskMessage(
         sender_id=sender_id,
         receiver_id=receiver_id,
         task_description=task_description,
         task_parameters=task_parameters or {},
-        priority=priority
+        priority=priority,
+        conversation_id=conversation_id
     )
 
 

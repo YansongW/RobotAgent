@@ -15,13 +15,31 @@ import numpy as np
 import networkx as nx
 from datetime import datetime
 
+# 错误码定义
+class EmbeddingError:
+    """嵌入模型错误码"""
+    MODEL_NOT_AVAILABLE = "EMBEDDING_MODEL_NOT_AVAILABLE"
+    ENCODING_FAILED = "EMBEDDING_ENCODING_FAILED"
+    INITIALIZATION_FAILED = "EMBEDDING_INITIALIZATION_FAILED"
+
 try:
     import faiss
     FAISS_AVAILABLE = True
 except ImportError:
     FAISS_AVAILABLE = False
 
-from .embedding_model import embedding_model
+# 延迟导入embedding_model以避免循环导入
+# from .embedding_model import embedding_model
+
+def _lazy_import_embedding_model():
+    """延迟导入embedding_model以避免循环导入"""
+    try:
+        from .embedding_model import embedding_model
+        return embedding_model
+    except ImportError as e:
+        import logging
+        logging.warning(f"无法导入embedding_model: {e}")
+        return None
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -179,8 +197,15 @@ class GraphStorage:
         
         # 生成实体嵌入
         entity_text = self._entity_to_text(entity_id, properties)
-        embedding = embedding_model.encode(entity_text)
-        self.entity_embeddings[entity_id] = embedding[0] if len(embedding.shape) > 1 else embedding
+        embedding_model = _lazy_import_embedding_model()
+        if embedding_model is None:
+            raise RuntimeError(f"错误码: {EmbeddingError.MODEL_NOT_AVAILABLE} - 嵌入模型不可用，无法添加实体")
+        
+        try:
+            embedding = embedding_model.encode(entity_text)
+            self.entity_embeddings[entity_id] = embedding[0] if len(embedding.shape) > 1 else embedding
+        except Exception as e:
+            raise RuntimeError(f"错误码: {EmbeddingError.ENCODING_FAILED} - 实体嵌入编码失败: {str(e)}")
         
         # 标记为已修改
         self.modified_entities.add(entity_id)
@@ -261,7 +286,14 @@ class GraphStorage:
             return []
         
         # 生成查询向量
-        query_embedding = embedding_model.encode(query_text)
+        embedding_model = _lazy_import_embedding_model()
+        if embedding_model is None:
+            raise RuntimeError(f"错误码: {EmbeddingError.MODEL_NOT_AVAILABLE} - 嵌入模型不可用，无法执行相似实体搜索")
+        
+        try:
+            query_embedding = embedding_model.encode(query_text)
+        except Exception as e:
+            raise RuntimeError(f"错误码: {EmbeddingError.ENCODING_FAILED} - 嵌入编码失败: {str(e)}")
         if len(query_embedding.shape) > 1:
             query_embedding = query_embedding[0]
         
@@ -290,7 +322,14 @@ class GraphStorage:
         vector_store = VectorStore()
         
         # 生成文档向量
-        embeddings = embedding_model.encode(documents)
+        embedding_model = _lazy_import_embedding_model()
+        if embedding_model is None:
+            raise RuntimeError(f"错误码: {EmbeddingError.MODEL_NOT_AVAILABLE} - 嵌入模型不可用，无法创建实体向量存储")
+        
+        try:
+            embeddings = embedding_model.encode(documents)
+        except Exception as e:
+            raise RuntimeError(f"错误码: {EmbeddingError.ENCODING_FAILED} - 文档嵌入编码失败: {str(e)}")
         
         # 准备元数据
         metadatas = []
@@ -325,7 +364,14 @@ class GraphStorage:
         if entity_id not in self.vector_stores:
             return []
         
-        query_embedding = embedding_model.encode(query)
+        embedding_model = _lazy_import_embedding_model()
+        if embedding_model is None:
+            raise RuntimeError(f"错误码: {EmbeddingError.MODEL_NOT_AVAILABLE} - 嵌入模型不可用，无法搜索实体文档")
+        
+        try:
+            query_embedding = embedding_model.encode(query)
+        except Exception as e:
+            raise RuntimeError(f"错误码: {EmbeddingError.ENCODING_FAILED} - 查询嵌入编码失败: {str(e)}")
         if len(query_embedding.shape) > 1:
             query_embedding = query_embedding[0]
         

@@ -295,6 +295,7 @@ class TaskMessage(BaseMessage):
     dependencies: List[str] = field(default_factory=list)
     deadline: Optional[datetime] = None
     conversation_id: Optional[str] = None
+    task_definition: Optional[Any] = None  # 添加task_definition属性以兼容chat_agent
     
     def update_status(self, status: TaskStatus, result: Optional[Any] = None, 
                      error: Optional[str] = None) -> None:
@@ -569,6 +570,13 @@ class MessageAnalysis:
     context_requirements: List[str] = field(default_factory=list)
     suggested_response_type: Optional[MessageType] = None
     analysis_metadata: Dict[str, Any] = field(default_factory=dict)
+    
+    # 新增字段以支持chat_agent.py中的使用
+    emotion: Optional[str] = None  # 情感类型
+    key_entities: List[Dict[str, Any]] = field(default_factory=list)  # 关键实体
+    topics: List[str] = field(default_factory=list)  # 主题列表
+    requires_clarification: bool = False  # 是否需要澄清
+    suggested_actions: List[str] = field(default_factory=list)  # 建议动作
 
 
 class MessageProtocol(ABC):

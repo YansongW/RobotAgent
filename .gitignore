@@ -146,3 +146,5 @@ data/
 
 # 外部项目代码 - 用于学习分析，不提交到仓库
 external_projects/
+# 学习文档 - 不提交到仓库
+docs/study/

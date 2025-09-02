@@ -13,8 +13,18 @@ from collections import defaultdict
 from datetime import datetime, timedelta
 
 from .graph_storage import GraphStorage
-from .embedding_model import embedding_model
+# 延迟导入embedding_model以避免循环导入
+# from .embedding_model import embedding_model
 from src.utils.logger import get_logger
+
+def _lazy_import_embedding_model():
+    """延迟导入embedding_model以避免循环导入"""
+    try:
+        from .embedding_model import embedding_model
+        return embedding_model
+    except ImportError as e:
+        logger.warning(f"无法导入embedding_model: {e}")
+        return None
 
 logger = get_logger(__name__)
 

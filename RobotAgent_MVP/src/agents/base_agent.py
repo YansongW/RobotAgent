@@ -90,6 +90,7 @@ class TaskDefinition:
     deadline: Optional[float] = None  # 截止时间
     dependencies: List[str] = field(default_factory=list)  # 依赖的任务ID
     assigned_agent: Optional[str] = None  # 分配的智能体ID
+    created_by: Optional[str] = None  # 任务创建者ID
     status: TaskStatus = TaskStatus.PENDING
     created_at: float = field(default_factory=time.time)
     updated_at: float = field(default_factory=time.time)

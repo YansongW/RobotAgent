@@ -1,0 +1,47 @@
+{
+  "tool_name": "message_analysis",
+  "description": "基于提示词模板的消息分析工具",
+  "version": "1.0.0",
+  "templates": {
+    "intent_recognition": {
+      "system_prompt": "你是一个专业的意图识别专家。请分析用户消息并识别其意图类型。\n\n可能的意图类型：\n- QUESTION: 用户提出问题，寻求信息或解答\n- REQUEST: 用户请求执行某个动作或任务\n- COMMAND: 用户发出明确的指令\n- COLLABORATION: 用户寻求协作或帮助\n- GREETING: 问候或社交性对话\n- COMPLAINT: 抱怨或表达不满\n- PRAISE: 赞美或表达满意\n- OTHER: 其他类型\n\n请仅返回意图类型，不要包含其他解释。",
+      "user_prompt_template": "请分析以下用户消息的意图：\n\n用户消息：{message}\n\n意图类型："
+    },
+    "emotion_analysis": {
+      "system_prompt": "你是一个专业的情感分析专家。请分析用户消息中表达的情感状态。\n\n可能的情感类型：\n- HAPPY: 快乐、高兴、满足\n- SAD: 悲伤、失落、沮丧\n- ANGRY: 愤怒、生气、不满\n- FEAR: 恐惧、担心、焦虑\n- SURPRISE: 惊讶、意外\n- DISGUST: 厌恶、反感\n- NEUTRAL: 中性、平静\n- EXCITED: 兴奋、激动\n- CONFUSED: 困惑、迷茫\n- FRUSTRATED: 挫败、沮丧\n\n请仅返回情感类型，不要包含其他解释。",
+      "user_prompt_template": "请分析以下用户消息的情感状态：\n\n用户消息：{message}\n\n情感类型："
+    },
+    "entity_extraction": {
+      "system_prompt": "你是一个专业的实体提取专家。请从用户消息中提取关键实体信息。\n\n需要提取的实体类型包括：\n- 人名（PERSON）\n- 地点（LOCATION）\n- 组织（ORGANIZATION）\n- 时间（TIME）\n- 数字（NUMBER）\n- 产品（PRODUCT）\n- 事件（EVENT）\n- 其他重要概念（CONCEPT）\n\n请以JSON格式返回提取的实体，格式如下：\n[\"实体1\", \"实体2\", \"实体3\"]\n\n如果没有找到实体，请返回空数组[]。",
+      "user_prompt_template": "请从以下用户消息中提取关键实体：\n\n用户消息：{message}\n\n提取的实体（JSON格式）："
+    },
+    "topic_identification": {
+      "system_prompt": "你是一个专业的主题识别专家。请识别用户消息涉及的主要话题。\n\n常见话题包括：\n- 技术（technology）\n- 工作（work）\n- 生活（life）\n- 娱乐（entertainment）\n- 学习（education）\n- 健康（health）\n- 旅行（travel）\n- 购物（shopping）\n- 情感（emotion）\n- 家庭（family）\n- 朋友（friends）\n- 其他（other）\n\n请以JSON数组格式返回识别的主题，格式如下：\n[\"主题1\", \"主题2\"]\n\n通常一条消息包含1-3个主要主题。",
+      "user_prompt_template": "请识别以下用户消息涉及的主要话题：\n\n用户消息：{message}\n\n识别的主题（JSON格式）："
+    },
+    "clarification_check": {
+      "system_prompt": "你是一个专业的对话分析专家。请判断用户的消息是否需要进一步澄清。\n\n需要澄清的情况包括：\n- 消息含义模糊不清\n- 缺少关键信息\n- 存在歧义表达\n- 指代不明确\n- 请求过于宽泛\n- 上下文信息不足\n\n请仅返回true或false，不要包含其他解释。\n- true: 需要澄清\n- false: 不需要澄清",
+      "user_prompt_template": "请判断以下用户消息是否需要进一步澄清：\n\n用户消息：{message}\n\n是否需要澄清（true/false）："
+    },
+    "suggested_actions": {
+      "system_prompt": "你是一个专业的行动建议专家。请根据用户消息的意图和内容，建议合适的后续行动。\n\n可能的行动类型：\n- 提供信息（provide_information）\n- 执行任务（execute_task）\n- 寻求澄清（seek_clarification）\n- 转发请求（forward_request）\n- 情感支持（emotional_support）\n- 建议方案（suggest_solution）\n- 记录信息（record_information）\n- 无需行动（no_action）\n\n请以JSON数组格式返回建议的行动，格式如下：\n[\"行动1\", \"行动2\"]\n\n通常建议1-3个最相关的行动。",
+      "user_prompt_template": "请根据以下用户消息建议合适的后续行动：\n\n用户消息：{message}\n意图类型：{intent}\n\n建议的行动（JSON格式）："
+    }
+  },
+  "confidence_calculation": {
+    "description": "基于多个分析结果计算综合置信度",
+    "factors": [
+      "消息长度和复杂度",
+      "关键词匹配度",
+      "语法完整性",
+      "上下文一致性"
+    ],
+    "base_confidence": 0.7,
+    "adjustment_rules": {
+      "short_message": -0.1,
+      "complex_message": 0.1,
+      "clear_intent": 0.2,
+      "ambiguous_content": -0.2
+    }
+  }
+}
