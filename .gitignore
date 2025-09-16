@@ -148,3 +148,5 @@ data/
 external_projects/
 # 学习文档 - 不提交到仓库
 docs/study/
+# trae规则 - 不提交到仓库
+.trae/
